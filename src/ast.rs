@@ -1,26 +1,75 @@
 use crate::token::Token;
 
-trait Node {
+pub trait Node {
     fn token_literal(&self) -> String;
 }
 
-trait Statement: Node {
-    fn statement_node(&self);
+#[derive(Debug)]
+pub enum Statement {
+    Let {
+        token: Token,
+        name: Literal,
+        value: Expression,
+    },
 }
 
-trait Expression: Node {
-    fn expression_node(&self);
+impl Statement {
+    pub fn statement_node(&self) {}
 }
 
-pub struct Program<T: Statement + Node> {
-    statements: Vec<T>,
-}
-
-impl<T> Program<T>
-where
-    T: Statement + Node,
-{
+impl Node for Statement {
     fn token_literal(&self) -> String {
+        match self {
+            Statement::Let { token, .. } => token.literal.to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Literal {
+    pub token: Token,
+    pub value: String,
+}
+
+impl Literal {
+    pub fn new(token: Token, value: String) -> Literal {
+        Literal { token, value }
+    }
+}
+
+impl Node for Literal {
+    fn token_literal(&self) -> String {
+        self.token.literal.to_owned()
+    }
+}
+
+#[derive(Debug)]
+pub enum Expression {
+    Identifier { token: Token, value: String },
+}
+
+impl Expression {
+    pub fn expression_node(&self) {}
+}
+
+impl Node for Expression {
+    fn token_literal(&self) -> String {
+        match self {
+            Expression::Identifier { token, .. } => token.literal.to_owned(),
+        }
+    }
+}
+
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+impl Program {
+    pub fn new() -> Program {
+        Program { statements: Vec::new() }
+    }
+
+    pub fn token_literal(&self) -> String {
         if self.statements.len() > 0 {
             self.statements[0].token_literal()
         } else {
@@ -28,37 +77,3 @@ where
         }
     }
 }
-
-struct LetStatement {
-    token: Token,
-    name: Identifier,
-    value: dyn Expression,
-}
-
-impl Node for LetStatement {
-    fn token_literal(&self) -> String {
-        self.token.literal.to_owned()
-    }
-}
-
-impl Statement for LetStatement {
-    fn statement_node(&self) {
-    }
-}
-
-struct Identifier {
-    token: Token,
-    value: String,
-}
-
-impl Node for Identifier {
-    fn token_literal(&self) -> String {
-        self.token.literal.to_owned()
-    }
-}
-
-impl Expression for Identifier {
-    fn expression_node(&self) {
-    }
-}
-

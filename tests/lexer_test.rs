@@ -16,7 +16,7 @@ impl<'a> Test<'a> {
 
 #[test]
 fn test_next_token() {
-    let input = r#"let five = 5;
+    let input = r"let five = 5;
     let ten = 10;
 
     let add = fn(x, y) {
@@ -35,8 +35,7 @@ fn test_next_token() {
 
     10 == 10;
     10 != 9;
-    "#
-    .to_string();
+    " .to_string();
 
     let tests = vec![
         Test::new(TokenType::LET, "let"),
