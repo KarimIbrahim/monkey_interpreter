@@ -1,5 +1,5 @@
 use monkey_interpreter::{
-    ast::{Expression, ExpressionContent, Literal, Program, Statement, StatementContent},
+    ast::{Expression, ExpressionContent, Program, Statement, StatementContent},
     token::{Token, TokenType},
 };
 
@@ -9,7 +9,12 @@ fn test_string() {
         statements: vec![Statement::new(
             Token::new(TokenType::LET, "let"),
             StatementContent::Let {
-                name: Literal::new(Token::new(TokenType::IDENT, "myVar"), "myVar".to_string()),
+                name: Expression::new(
+                    Token::new(TokenType::IDENT, "myVar"),
+                    ExpressionContent::Identifier {
+                        value: "myVar".to_string(),
+                    },
+                ),
                 value: Expression::new(
                     Token::new(TokenType::IDENT, "anotherVar"),
                     ExpressionContent::Identifier {

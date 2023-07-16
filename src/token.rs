@@ -41,7 +41,7 @@ static KEYWORDS: Lazy<HashMap<&str, TokenType>> = Lazy::new(|| {
     map
 });
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default, Hash)]
 pub enum TokenType {
     ILLEGAL,
     #[default]

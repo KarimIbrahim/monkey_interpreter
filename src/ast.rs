@@ -20,7 +20,7 @@ pub trait ExpressionNode: Node {
     fn expression_node(&self);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Expression {
     token: Token,
     pub expression_content: ExpressionContent,
@@ -28,7 +28,7 @@ pub struct Expression {
 
 #[derive(Debug)]
 pub enum StatementContent {
-    Let { name: Literal, value: Expression },
+    Let { name: Expression, value: Expression },
 
     Return { return_value: Option<Expression> },
 
@@ -94,39 +94,29 @@ fn stringify_return_statement(
 fn stringify_let_statement(
     f: &mut std::fmt::Formatter<'_>,
     token_literal: &String,
-    name: &Literal,
+    name: &Expression,
     value: &Expression,
 ) -> std::fmt::Result {
     write!(f, "{} {} = {};", token_literal, name, value)
 }
 
 #[derive(Debug, Clone)]
-pub struct Literal {
-    pub token: Token,
-    pub value: String,
-}
-
-impl Literal {
-    pub fn new(token: Token, value: String) -> Literal {
-        Literal { token, value }
-    }
-}
-
-impl Node for Literal {
-    fn token_literal(&self) -> String {
-        self.token.literal.to_owned()
-    }
-}
-
-impl Display for Literal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        stringify_expression_identifier(f, &self.value)
-    }
-}
-
-#[derive(Debug)]
 pub enum ExpressionContent {
-    Identifier { value: String },
+    Identifier {
+        value: String,
+    },
+    IntegerLiteral {
+        value: i64,
+    },
+    PrefixExpression {
+        operator: String,
+        right: Box<Expression>,
+    },
+    InfixExpression {
+        left: Box<Expression>,
+        operator: String,
+        right: Box<Expression>,
+    },
 }
 
 impl Expression {
@@ -151,16 +141,12 @@ impl Node for Expression {
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.expression_content {
-            ExpressionContent::Identifier { value } => stringify_expression_identifier(f, value),
+            ExpressionContent::Identifier { value } => write!(f, "{}", value),
+            ExpressionContent::IntegerLiteral { value } => write!(f, "{}", value),
+            ExpressionContent::PrefixExpression { operator, right } => write!(f, "({}{})", operator, right),
+            ExpressionContent::InfixExpression { left, operator, right } => write!(f, "({} {} {})", left, operator, right),
         }
     }
-}
-
-fn stringify_expression_identifier(
-    f: &mut std::fmt::Formatter<'_>,
-    value: &str,
-) -> std::fmt::Result {
-    write!(f, "{}", value)
 }
 
 pub struct Program {
