@@ -68,6 +68,8 @@ impl Parser {
         parser.register_prefix(TokenType::TRUE, Self::parse_boolean);
         parser.register_prefix(TokenType::FALSE, Self::parse_boolean);
 
+        parser.register_prefix(TokenType::LPAREN, Self::parse_grouped_expression);
+
         parser.next_token();
         parser.next_token();
 
@@ -81,6 +83,18 @@ impl Parser {
                 value: self.current_token_is(&TokenType::TRUE),
             },
         ))
+    }
+
+    pub fn parse_grouped_expression(&mut self) -> Option<Expression> {
+        self.next_token();
+
+        let expression = self.parse_expression(LOWEST);
+
+        if !self.expect_peek(&TokenType::RPAREN) {
+            None
+        } else {
+            expression
+        }
     }
 
     pub fn parse_identifier(&mut self) -> Option<Expression> {

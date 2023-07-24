@@ -369,6 +369,11 @@ fn test_operator_precedence_parsing() {
         Test::new("false".to_string(), "false".to_string()),
         Test::new("3 > 5 == false".to_string(), "((3 > 5) == false)".to_string()),
         Test::new("3 < 5 == true".to_string(), "((3 < 5) == true)".to_string()),
+        Test::new("1 + (2 + 3) + 4".to_string(), "((1 + (2 + 3)) + 4)".to_string()),
+        Test::new("(5 + 5) * 2".to_string(), "((5 + 5) * 2)".to_string()),
+        Test::new("2 / (5 + 5)".to_string(), "(2 / (5 + 5))".to_string()),
+        Test::new("-(5 + 5)".to_string(), "(-(5 + 5))".to_string()),
+        Test::new("!(true == true)".to_string(), "(!(true == true))".to_string()),
     ];
 
     for test in tests {
