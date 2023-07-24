@@ -117,6 +117,9 @@ pub enum ExpressionContent {
         operator: String,
         right: Box<Expression>,
     },
+    Boolean {
+        value: bool,
+    },
 }
 
 impl Expression {
@@ -145,6 +148,7 @@ impl Display for Expression {
             ExpressionContent::IntegerLiteral { value } => write!(f, "{}", value),
             ExpressionContent::PrefixExpression { operator, right } => write!(f, "({}{})", operator, right),
             ExpressionContent::InfixExpression { left, operator, right } => write!(f, "({} {} {})", left, operator, right),
+            ExpressionContent::Boolean { value } => write!(f, "{}", value),
         }
     }
 }

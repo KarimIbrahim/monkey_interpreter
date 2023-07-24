@@ -70,7 +70,7 @@ impl Lexer {
     pub fn read_identifier(&mut self) -> String {
         let position = self.position;
 
-        while Self::is_letter(self.ch) {
+        while Self::is_letter(self.ch) || Self::is_digit(self.ch) {
             self.read_char();
         }
 

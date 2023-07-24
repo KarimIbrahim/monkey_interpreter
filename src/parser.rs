@@ -65,10 +65,22 @@ impl Parser {
         parser.register_infix(TokenType::LT, Self::parse_infix_expression);
         parser.register_infix(TokenType::GT, Self::parse_infix_expression);
 
+        parser.register_prefix(TokenType::TRUE, Self::parse_boolean);
+        parser.register_prefix(TokenType::FALSE, Self::parse_boolean);
+
         parser.next_token();
         parser.next_token();
 
         parser
+    }
+
+    pub fn parse_boolean(&mut self) -> Option<Expression> {
+        Some(Expression::new(
+            self.current_token.to_owned(),
+            ExpressionContent::Boolean {
+                value: self.current_token_is(&TokenType::TRUE),
+            },
+        ))
     }
 
     pub fn parse_identifier(&mut self) -> Option<Expression> {
