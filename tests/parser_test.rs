@@ -6,80 +6,88 @@ use monkey_interpreter::{
     parser::Parser,
 };
 
-struct Test<'a> {
-    expected_identifier: &'a str,
-}
-
-impl<'a> Test<'a> {
-    fn new(expected_identifier: &'a str) -> Test {
-        Test {
-            expected_identifier,
-        }
-    }
-}
-
 #[test]
 fn test_let_statements() {
-    let input = r"
-    let x = 5;
-    let y = 10;
-    let foobar = 838383;
-    "
-        .to_string();
+    struct Test<'a> {
+        input: &'a str,
+        expected_identifier: &'a str,
+        expected_value: Box<&'a dyn Any>,
+    }
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected_identifier: &'a str, expected_value: &'a dyn Any) -> Self {
+            Test { input, expected_identifier, expected_value: Box::new(expected_value) }
+        }
+    }
 
-    let lexer = Lexer::new(input);
-    let mut parser = Parser::new(lexer);
+    let prefix_tests = [
+        Test::new("let x = 5;", "x", &5),
+        Test::new("let y = true;", "y", &true),
+        Test::new("let foobar = y", "foobar", &"y"),
+    ];
 
-    let program = parser.parse_program();
+    for test in prefix_tests {
 
-    check_parser_errors(&parser);
+        let lexer = Lexer::new(test.input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
 
-    assert_eq!(
-        program.statements.len(),
-        3,
-        "program.statements does not contain 3 statements."
-    );
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program.statements does not contain 1 statements."
+        );
 
-    let tests = vec![Test::new("x"), Test::new("y"), Test::new("foobar")];
+        let statement = &program.statements[0];
+        test_let_statement(statement, test.expected_identifier);
 
-    for (i, test) in tests.iter().enumerate() {
-        test_let_statement(&program.statements[i], test.expected_identifier); 
+        let StatementContent::Let { name: _, value } = &statement.statement_content else {
+            panic!("Statement is not a let statement. Got [{}].", statement);
+        };
+
+        test_literal_expression(value, &test.expected_value);
     }
 }
 
 #[test]
 fn test_return_statements() {
-    let input = r"
-    return 5;
-    return 10;
-    return 993322;
-    "
-        .to_string();
+    struct Test<'a> {
+        input: &'a str,
+        expected_value: Box<&'a dyn Any>,
+    }
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected_value: &'a dyn Any) -> Self {
+            Test { input, expected_value: Box::new(expected_value) }
+        }
+    }
 
-    let lexer = Lexer::new(input);
-    let mut parser = Parser::new(lexer);
+    let prefix_tests = [
+        Test::new("return 5;", &5),
+        Test::new("return true;", &true),
+        Test::new("return foobar;", &"foobar"),
+    ];
 
-    let program = parser.parse_program();
+    for test in prefix_tests {
 
-    check_parser_errors(&parser);
+        let lexer = Lexer::new(test.input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
 
-    assert_eq!(
-        program.statements.len(),
-        3,
-        "program.statements does not contain 3 statements."
-    );
-
-    for statement in program.statements {
         assert_eq!(
-            statement.token_literal(),
-            "return",
-            "statement.token_literal is not 'return'."
+            program.statements.len(),
+            1,
+            "program.statements does not contain 1 statements."
         );
 
-        assert!(
-            matches!(statement.statement_content, StatementContent::Return { .. }),
-            "statmement is not Statmement::Return."
-        );
+        let statement = &program.statements[0];
+        let StatementContent::Return { return_value } = &statement.statement_content else {
+            panic!("Statement is not a return statement. Got [{}].", statement);
+        };
+
+        assert_eq!(statement.token_literal(), "return".to_string(), "Token literal is not return.");
+
+        test_literal_expression(return_value.as_ref().unwrap(), &test.expected_value);
     }
 }
 

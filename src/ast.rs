@@ -163,24 +163,28 @@ impl Display for Expression {
                 }
                 Ok(())
             }
-            ExpressionContent::FucntionLiteral { parameters, body } => 
-                write!(
-                    f,
-                    "{}({}){}",
-                    self.token_literal(),
-                    parameters
-                        .iter()
-                        .map(|b| b.deref().to_string())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    body
-                ),
-            ExpressionContent::CallExpression { function, arguments } => write!(
-            f,
+            ExpressionContent::FucntionLiteral { parameters, body } => write!(
+                f,
+                "{}({}){}",
+                self.token_literal(),
+                parameters
+                    .iter()
+                    .map(|b| b.deref().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                body
+            ),
+            ExpressionContent::CallExpression {
+                function,
+                arguments,
+            } => write!(
+                f,
                 "{}({})",
                 function.deref(),
-                arguments.iter().map(|b| b.deref().to_string())
-                .collect::<Vec<_>>()
+                arguments
+                    .iter()
+                    .map(|b| b.deref().to_string())
+                    .collect::<Vec<_>>()
                     .join(", ")
             ),
         }

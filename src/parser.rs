@@ -335,22 +335,15 @@ impl Parser {
             return None;
         }
 
-        while !self.current_token_is(&TokenType::SEMICOLON) {
+        self.next_token();
+
+        let value = self.parse_expression(LOWEST)?;
+
+        if self.peek_token_is(&TokenType::SEMICOLON) {
             self.next_token();
         }
 
-        Some(Statement::new(
-            token.to_owned(),
-            StatementContent::Let {
-                name,
-                value: Expression::new(
-                    token,
-                    ExpressionContent::Identifier {
-                        value: "".to_string(),
-                    },
-                ),
-            },
-        ))
+        Some(Statement::new(token, StatementContent::Let { name, value }))
     }
 
     fn current_token_is(&self, token_type: &TokenType) -> bool {
@@ -381,18 +374,20 @@ impl Parser {
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {
-        let statement = Statement::new(
-            self.current_token.to_owned(),
-            StatementContent::Return { return_value: None },
-        );
+        let token = self.current_token.to_owned();
 
         self.next_token();
 
-        while !self.current_token_is(&TokenType::SEMICOLON) {
+        let return_value = self.parse_expression(LOWEST);
+
+        if self.peek_token_is(&TokenType::SEMICOLON) {
             self.next_token();
         }
 
-        Some(statement)
+        Some(Statement::new(
+            token,
+            StatementContent::Return { return_value },
+        ))
     }
 
     fn register_prefix(&mut self, token_type: TokenType, parse_function: PrefixParseFunction) {

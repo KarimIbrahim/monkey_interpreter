@@ -2,13 +2,18 @@
 name = "monkey_interpreter"
 version = "0.1.0"
 edition = "2021"
+authors = ["Karim Ibrahim"]
 
 [lib]
 path = "src/lib.rs"
 
 [[bin]]
-path = "src/main.rs"
-name = "monkeyinterpreter"
+path = "src/bin/tokenizer.rs"
+name = "tokenizer"
+
+[[bin]]
+path = "src/bin/lexer.rs"
+name = "lexer"
 
 [dependencies]
 once_cell = "1.18.0"

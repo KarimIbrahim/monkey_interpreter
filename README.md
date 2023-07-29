@@ -2,4 +2,5 @@ My implementation of the Monkey language interpreter in Rust. Mainly following t
 
 ### Commands
 
-* `cargo run`: Starts the REPL for the lexer.
+* `cargo run --bin tokenizer`: Starts the tokenizer.
+* `cargo run --bin lexer`: Starts the lexer.
