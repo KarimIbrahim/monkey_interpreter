@@ -280,17 +280,17 @@ fn test_parsing_infix_expressions() {
         InfixTest::new("5 < 5;".to_string(), &5, "<".to_string(), &5),
         InfixTest::new("5 == 5;".to_string(), &5, "==".to_string(), &5),
         InfixTest::new("5 != 5;".to_string(), &5, "!=".to_string(), &5),
-		InfixTest::new("foobar + barfoo;".to_string(), &"foobar", "+".to_string(), &"barfoo"),
-		InfixTest::new("foobar - barfoo;".to_string(), &"foobar", "-".to_string(), &"barfoo"),
-		InfixTest::new("foobar * barfoo;".to_string(), &"foobar", "*".to_string(), &"barfoo"),
-		InfixTest::new("foobar / barfoo;".to_string(), &"foobar", "/".to_string(), &"barfoo"),
-		InfixTest::new("foobar > barfoo;".to_string(), &"foobar", ">".to_string(), &"barfoo"),
-		InfixTest::new("foobar < barfoo;".to_string(), &"foobar", "<".to_string(), &"barfoo"),
-		InfixTest::new("foobar == barfoo;".to_string(), &"foobar", "==".to_string(), &"barfoo"),
-		InfixTest::new("foobar != barfoo;".to_string(), &"foobar", "!=".to_string(), &"barfoo"),
-		InfixTest::new("true == true".to_string(), &true, "==".to_string(), &true),
-		InfixTest::new("true != false".to_string(), &true, "!=".to_string(), &false),
-		InfixTest::new("false == false".to_string(), &false, "==".to_string(), &false),
+        InfixTest::new("foobar + barfoo;".to_string(), &"foobar", "+".to_string(), &"barfoo"),
+        InfixTest::new("foobar - barfoo;".to_string(), &"foobar", "-".to_string(), &"barfoo"),
+        InfixTest::new("foobar * barfoo;".to_string(), &"foobar", "*".to_string(), &"barfoo"),
+        InfixTest::new("foobar / barfoo;".to_string(), &"foobar", "/".to_string(), &"barfoo"),
+        InfixTest::new("foobar > barfoo;".to_string(), &"foobar", ">".to_string(), &"barfoo"),
+        InfixTest::new("foobar < barfoo;".to_string(), &"foobar", "<".to_string(), &"barfoo"),
+        InfixTest::new("foobar == barfoo;".to_string(), &"foobar", "==".to_string(), &"barfoo"),
+        InfixTest::new("foobar != barfoo;".to_string(), &"foobar", "!=".to_string(), &"barfoo"),
+        InfixTest::new("true == true".to_string(), &true, "==".to_string(), &true),
+        InfixTest::new("true != false".to_string(), &true, "!=".to_string(), &false),
+        InfixTest::new("false == false".to_string(), &false, "==".to_string(), &false),
     ];
 
     for test in infix_tests {
@@ -374,6 +374,9 @@ fn test_operator_precedence_parsing() {
         Test::new("2 / (5 + 5)".to_string(), "(2 / (5 + 5))".to_string()),
         Test::new("-(5 + 5)".to_string(), "(-(5 + 5))".to_string()),
         Test::new("!(true == true)".to_string(), "(!(true == true))".to_string()),
+        Test::new("a + add(b * c) + d".to_string(), "((a + add((b * c))) + d)".to_string()),
+        Test::new("add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))".to_string(), "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))".to_string()),
+        Test::new("add(a + b + c * d / f + g)".to_string(), "add((((a + b) + ((c * d) / f)) + g))".to_string()),
     ];
 
     for test in tests {
@@ -436,4 +439,287 @@ fn test_infix_expression(expression: &Expression, expected_left: &dyn Any, expec
     assert_eq!(operator, &expected_operator, "expression operator does not match.");
 
     test_literal_expression(right, expected_right);
+}
+
+#[test]
+fn test_if_expression() {
+    let input = "if (x < y) { x }".to_string();
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.statements does not contain 1 statements."
+    );
+
+    let statement = &program.statements[0];
+    let StatementContent::Expression { expression } = &statement.statement_content else {
+        panic!("statement is not an Expression. Got [{}].", statement);
+    };
+
+    let ExpressionContent::IfExpression { condition, consequence, alternative } = &expression.expression_content else {
+        panic!("expression is not an IfExpression. Got [{:?}].", expression.expression_content);
+    };
+
+    test_infix_expression(condition, &"x".to_string(), "<".to_string(), &"y".to_string());
+
+    let StatementContent::BlockStatement { statements } = &consequence.statement_content else {
+        panic!("consequence is not a block statement. Got [{}].", consequence);
+    };
+
+    assert_eq!(statements.len(), 1, "consequence has wrong number of statements.");
+
+    let StatementContent::Expression { expression } = &statements[0].statement_content else {
+        panic!("Statements[0] is not an Expression. Got [{}].", statements[0].deref());
+    };
+
+    test_identifier(&expression, &"x".to_string());
+
+    let None = alternative else {
+        panic!("Alternative is not None. Got [{:?}].", alternative);
+    };
+}
+
+#[test]
+fn test_if_else_expression() {
+    let input = "if (x < y) { x } else { y }".to_string();
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.statements does not contain 1 statements."
+    );
+
+    let statement = &program.statements[0];
+    let StatementContent::Expression { expression } = &statement.statement_content else {
+        panic!("statement is not an Expression. Got [{}].", statement);
+    };
+
+    let ExpressionContent::IfExpression { condition, consequence, alternative } = &expression.expression_content else {
+        panic!("expression is not an IfExpression. Got [{:?}].", expression.expression_content);
+    };
+
+    test_infix_expression(condition, &"x".to_string(), "<".to_string(), &"y".to_string());
+
+    let StatementContent::BlockStatement { statements } = &consequence.statement_content else {
+        panic!("consequence is not a block statement. Got [{}].", consequence);
+    };
+
+    assert_eq!(statements.len(), 1, "consequence has wrong number of statements.");
+
+    let StatementContent::Expression { expression } = &statements[0].statement_content else {
+        panic!("Statements[0] is not an Expression. Got [{}].", statements[0].deref());
+    };
+
+    test_identifier(&expression, &"x".to_string());
+
+    let Some(alt) = alternative else {
+        panic!("Alternative is None.");
+    };
+
+    let StatementContent::BlockStatement { statements: alt_statements } = &alt.statement_content else {
+        panic!("alternative is not a block statement. Got [{}].", alt);
+    };
+
+    assert_eq!(alt_statements.len(), 1, "alternative has wrong number of statements.");
+
+    let StatementContent::Expression { expression: alt_expression } = &alt_statements[0].statement_content else {
+        panic!("Statements[0] is not an Expression. Got [{}].", alt_statements[0].deref());
+    };
+
+    test_identifier(&alt_expression, &"y".to_string());
+}
+
+#[test]
+fn test_function_literal_parsing() {
+    let input = "fn(x, y) { x + y; }".to_string();
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.statements does not contain 1 statements."
+    );
+
+    let statement = &program.statements[0];
+    let StatementContent::Expression { expression } = &statement.statement_content else {
+        panic!("statement is not an Expression. Got [{}].", statement);
+    };
+
+    let ExpressionContent::FucntionLiteral { parameters, body } = &expression.expression_content else {
+        panic!("expression is not an FunctionLiteral. Got [{:?}].", expression.expression_content);
+    };
+
+    assert_eq!(2, parameters.len(), "Fucntion literal has wrong number of parameters.");
+
+    test_literal_expression(&parameters[0], &"x".to_string());
+    test_literal_expression(&parameters[1], &"y".to_string());
+
+    let StatementContent::BlockStatement { statements } = &body.statement_content else {
+        panic!("Function body is not a BlockStatement. Got [{}].", body);
+    };
+
+    assert_eq!(1, statements.len(), "Function body has wrong number of statements.");
+
+    let StatementContent::Expression { expression } = &statements[0].statement_content else {
+        panic!("Fucntion body does not have an expression. Got [{}].", statements[0]);
+    };
+
+    test_infix_expression(&expression, &"x", "+".to_string(), &"y");
+}
+
+#[test]
+fn test_function_parameter_parsing() {
+    #[derive(Debug)]
+    struct Test<'a> {
+        input: &'a str,
+        expected_params: Vec<&'a str>,
+    }
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expectedParams: Vec<&'a str>) -> Self {
+            Test { input, expected_params: expectedParams }
+        }
+    }
+
+    let tests = [
+        Test::new("fn() {};",
+            vec![]),
+        Test::new("fn(x) {};",
+            vec!["x"]),
+        Test::new("fn(x, y, z) {};",
+            vec!["x", "y", "z"]),
+    ];
+
+    for test in tests {
+
+        let lexer = Lexer::new(test.input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        let statement = &program.statements[0];
+        let StatementContent::Expression { expression } = &statement.statement_content else {
+            panic!("Statement is not an Expression. Got [{}].", statement);
+        };
+
+        let ExpressionContent::FucntionLiteral { parameters, body: _ } = &expression.expression_content else {
+            panic!("Expression is not a FunctionLiteral. Got [{}].", expression);
+        };
+
+        assert_eq!(parameters.len(), test.expected_params.len(), "Parameters has the wrong length.");
+
+        for (i, ident) in parameters.iter().enumerate() {
+            test_literal_expression(ident, &test.expected_params[i]);
+        }
+    }
+}
+
+#[test]
+fn test_call_expression_parsing() {
+    let input = "add(1, 2 * 3, 4 + 5);".to_string();
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.statements does not contain 1 statements."
+    );
+
+    let statement = &program.statements[0];
+    let StatementContent::Expression { expression } = &statement.statement_content else {
+        panic!("statement is not an Expression. Got [{}].", statement);
+    };
+
+    let ExpressionContent::CallExpression { function, arguments } = &expression.expression_content else {
+        panic!("expression is not an CallExpression. Got [{:?}].", expression.expression_content);
+    };
+
+    test_identifier(&function, &"add".to_string());
+
+    assert_eq!(3, arguments.len(), "Wrong number of arguments");
+
+    test_literal_expression(&arguments[0], &1);
+    test_infix_expression(&arguments[1], &2, "*".to_string(), &3);
+    test_infix_expression(&arguments[2], &4, "+".to_string(), &5);
+}
+
+#[test]
+fn test_call_expression_parameter_parsing() {
+    #[derive(Debug)]
+    struct Test<'a> {
+        input: &'a str,
+        expected_ident: &'a str,
+        expected_arguments: Vec<&'a str>,
+    }
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected_ident: &'a str, expected_arguments: Vec<&'a str>) -> Self {
+            Test { input, expected_ident, expected_arguments }
+        }
+    }
+
+    let tests = [
+        Test::new("add();",
+            "add",
+            vec![]),
+        Test::new("add(1);",
+            "add",
+            vec!["1"]),
+        Test::new("add(1, 2 * 3, 4 + 5)",
+            "add",
+            vec!["1", "(2 * 3)", "(4 + 5)"]),
+    ];
+
+    for test in tests {
+
+        let lexer = Lexer::new(test.input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        let statement = &program.statements[0];
+        let StatementContent::Expression { expression } = &statement.statement_content else {
+            panic!("Statement is not an Expression. Got [{}].", statement);
+        };
+
+        let ExpressionContent::CallExpression { function, arguments } = &expression.expression_content else {
+            panic!("Expression is not a CallExpression. Got [{}].", expression);
+        };
+
+        test_identifier(&function, &test.expected_ident.to_string());
+
+        assert_eq!(arguments.len(), test.expected_arguments.len(), "Arguments has the wrong length.");
+
+        for (i, arg) in arguments.iter().enumerate() {
+            assert_eq!(arg.to_string(), test.expected_arguments[i].to_string(), "Mismatching argument.");
+        }
+    }
 }

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref};
 
 use crate::token::Token;
 
@@ -10,7 +10,7 @@ pub trait StatementNode: Node {
     fn statement_node(&self);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Statement {
     token: Token,
     pub statement_content: StatementContent,
@@ -26,13 +26,12 @@ pub struct Expression {
     pub expression_content: ExpressionContent,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StatementContent {
     Let { name: Expression, value: Expression },
-
     Return { return_value: Option<Expression> },
-
     Expression { expression: Expression },
+    BlockStatement { statements: Vec<Box<Statement>> },
 }
 
 impl Statement {
@@ -58,23 +57,17 @@ impl Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.statement_content {
             StatementContent::Let { name, value } => {
-                stringify_let_statement(f, &self.token_literal(), &name, &value)
+                write!(f, "{} {} = {};", &self.token_literal(), name, value)
             }
             StatementContent::Return { return_value } => {
                 stringify_return_statement(f, &self.token_literal(), &return_value)
             }
-            StatementContent::Expression { expression } => {
-                stringify_expression_statement(f, &expression)
-            }
+            StatementContent::Expression { expression } => write!(f, "{}", expression),
+            StatementContent::BlockStatement { statements } => Ok(statements
+                .iter()
+                .for_each(|s| write!(f, "{}", s.deref()).unwrap())),
         }
     }
-}
-
-fn stringify_expression_statement(
-    f: &mut std::fmt::Formatter<'_>,
-    expression: &Expression,
-) -> std::fmt::Result {
-    write!(f, "{}", expression)
 }
 
 fn stringify_return_statement(
@@ -89,15 +82,6 @@ fn stringify_return_statement(
     }
 
     write!(f, ";")
-}
-
-fn stringify_let_statement(
-    f: &mut std::fmt::Formatter<'_>,
-    token_literal: &String,
-    name: &Expression,
-    value: &Expression,
-) -> std::fmt::Result {
-    write!(f, "{} {} = {};", token_literal, name, value)
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +103,19 @@ pub enum ExpressionContent {
     },
     Boolean {
         value: bool,
+    },
+    IfExpression {
+        condition: Box<Expression>,
+        consequence: Box<Statement>,
+        alternative: Option<Box<Statement>>,
+    },
+    FucntionLiteral {
+        parameters: Vec<Box<Expression>>,
+        body: Box<Statement>,
+    },
+    CallExpression {
+        function: Box<Expression>,
+        arguments: Vec<Box<Expression>>,
     },
 }
 
@@ -146,9 +143,46 @@ impl Display for Expression {
         match &self.expression_content {
             ExpressionContent::Identifier { value } => write!(f, "{}", value),
             ExpressionContent::IntegerLiteral { value } => write!(f, "{}", value),
-            ExpressionContent::PrefixExpression { operator, right } => write!(f, "({}{})", operator, right),
-            ExpressionContent::InfixExpression { left, operator, right } => write!(f, "({} {} {})", left, operator, right),
+            ExpressionContent::PrefixExpression { operator, right } => {
+                write!(f, "({}{})", operator, right)
+            }
+            ExpressionContent::InfixExpression {
+                left,
+                operator,
+                right,
+            } => write!(f, "({} {} {})", left, operator, right),
             ExpressionContent::Boolean { value } => write!(f, "{}", value),
+            ExpressionContent::IfExpression {
+                condition,
+                consequence,
+                alternative,
+            } => {
+                write!(f, "if{} {}", condition, consequence).unwrap();
+                if let Some(alt) = alternative {
+                    write!(f, "else {}", alt).unwrap();
+                }
+                Ok(())
+            }
+            ExpressionContent::FucntionLiteral { parameters, body } => 
+                write!(
+                    f,
+                    "{}({}){}",
+                    self.token_literal(),
+                    parameters
+                        .iter()
+                        .map(|b| b.deref().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    body
+                ),
+            ExpressionContent::CallExpression { function, arguments } => write!(
+            f,
+                "{}({})",
+                function.deref(),
+                arguments.iter().map(|b| b.deref().to_string())
+                .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }
