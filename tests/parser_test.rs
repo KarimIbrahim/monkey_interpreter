@@ -595,8 +595,8 @@ fn test_function_parameter_parsing() {
         expected_params: Vec<&'a str>,
     }
     impl<'a> Test<'a> {
-        pub fn new(input: &'a str, expectedParams: Vec<&'a str>) -> Self {
-            Test { input, expected_params: expectedParams }
+        pub fn new(input: &'a str, expected_params: Vec<&'a str>) -> Self {
+            Test { input, expected_params }
         }
     }
 
