@@ -170,3 +170,80 @@ fn test_if_else_expression() {
         assert_eq!(evaluated, test.expected, "object does not match.");
     }
 }
+
+#[test]
+fn test_return_statements() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: i64,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: i64) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new("return 10;", 10),
+        Test::new("return 10; 9;", 10),
+        Test::new("return 2 * 5; 9;", 10),
+        Test::new("9; return 2 * 5; 9;", 10),
+        Test::new(r"
+        if (10 > 1) {
+            if(10 > 1) {
+                return 10;
+            }
+
+            return 1;
+        }
+        ", 10),
+    ];
+
+    for test in tests {
+        let evaluated = test_eval(&test.input);
+        test_integer_object(evaluated, test.expected);
+    }
+}
+
+#[test]
+fn test_error_handling() {
+    struct Test<'a> {
+        input: &'a str,
+        expected_message: &'a str,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected_message: &'a str) -> Self {
+            Test { input, expected_message }
+        }
+    }
+
+    let tests = vec![
+        Test::new("5 + true;", "type mismatch: INTEGER + BOOLEAN"),
+        Test::new("5 + true; 5;", "type mismatch: INTEGER + BOOLEAN"),
+        Test::new("-true;", "unknown operator: -BOOLEAN"),
+        Test::new("true + false;", "unknown operator: BOOLEAN + BOOLEAN"),
+        Test::new("5; true + false; 5", "unknown operator: BOOLEAN + BOOLEAN"),
+        Test::new("if (10 > 1) { true + false; }", "unknown operator: BOOLEAN + BOOLEAN"),
+        Test::new(r"
+        if (10 > 1) {
+            if (10 > 1) {
+                return true + false;
+            }
+
+            return 1;
+        }
+        ", "unknown operator: BOOLEAN + BOOLEAN"),
+    ];
+
+    for test in tests {
+        let evaluated = test_eval(&test.input);
+
+        let Object::Error { message } = evaluated else {
+            panic!("no error object returned. Got [{:?}].", evaluated);
+        };
+
+        assert_eq!(test.expected_message, message, "wrong error message.");
+    }
+}

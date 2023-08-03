@@ -44,15 +44,17 @@ impl Node for Statement {
     fn eval(&self) -> Object {
         match &self.statement_content {
             StatementContent::Let { name, value } => todo!(),
-            StatementContent::Return { return_value } => todo!(),
+            StatementContent::Return { return_value } => {
+                let val = return_value
+                    .as_ref()
+                    .map_or_else(Object::null, Expression::eval);
+                if let Object::Error { message: _ } = val {
+                    return val;
+                }
+                Object::return_value(val)
+            }
             StatementContent::Expression { expression } => expression.eval(),
-            StatementContent::BlockStatement { statements } => eval_statements(
-                &statements
-                    .iter()
-                    .map(Box::deref)
-                    .map(&Statement::to_owned)
-                    .collect(),
-            ),
+            StatementContent::BlockStatement { statements } => eval_block_statement(statements),
         }
     }
 }
@@ -171,6 +173,10 @@ fn eval_if_expression(
 ) -> Object {
     let condition = condition.eval();
 
+    if let Object::Error { message: _ } = condition {
+        return condition;
+    }
+
     if is_truthy(condition) {
         consequence.eval()
     } else if let Some(alt) = alternative {
@@ -185,11 +191,13 @@ fn is_truthy(condition: Object) -> bool {
         Object::Integer { value } => value != 0,
         Object::Boolean { value } => value == true,
         Object::NUll => false,
+        _ => false,
     }
 }
 
 fn eval_infix_expression(operator: &str, left: &Expression, right: &Expression) -> Object {
     match (left.eval(), right.eval()) {
+        (e @ Object::Error { message: _ }, _) | (_, e @ Object::Error { message: _ }) => e,
         (Object::Integer { value: l_val }, Object::Integer { value: r_val }) => {
             eval_integer_infix_expression(operator, l_val, r_val)
         }
@@ -203,7 +211,18 @@ fn eval_infix_expression(operator: &str, left: &Expression, right: &Expression) 
         {
             Object::boolean(l_val != r_val)
         }
-        _ => Object::null(),
+        (l, r) if l.r#type() != r.r#type() => Object::error(&format!(
+            "type mismatch: {} {} {}",
+            l.r#type(),
+            operator,
+            r.r#type()
+        )),
+        (l, r) => Object::error(&format!(
+            "unknown operator: {} {} {}",
+            l.r#type(),
+            operator,
+            r.r#type()
+        )),
     }
 }
 
@@ -217,24 +236,31 @@ fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Objec
         ">" => Object::boolean(left > right),
         "==" => Object::boolean(left == right),
         "!=" => Object::boolean(left != right),
-        _ => Object::null(),
+        _ => Object::error(&format!(
+            "unknown operator: {} {} {}",
+            "INTEGER", operator, "INTEGER"
+        )),
     }
 }
 
 fn eval_prefix_expression(operator: &str, right: &Expression) -> Object {
     let right = right.eval();
 
+    if let Object::Error { message: _ } = right {
+        return right;
+    }
+
     match operator {
         "!" => eval_bang_operator_expression(right),
         "-" => eval_minus_operator_expression(right),
-        _ => Object::null(),
+        _ => Object::error(&format!("unknown operator: {}{}", operator, right.r#type())),
     }
 }
 
 fn eval_minus_operator_expression(right: Object) -> Object {
     match right {
         Object::Integer { value } => Object::Integer { value: -value },
-        _ => Object::null(),
+        _ => Object::error(&format!("unknown operator: -{}", right.r#type())),
     }
 }
 
@@ -243,6 +269,7 @@ fn eval_bang_operator_expression(right: Object) -> Object {
         Object::Integer { value } => Object::boolean(value == 0),
         Object::Boolean { value } => Object::boolean(!value),
         Object::NUll => Object::boolean(false),
+        _ => Object::null(),
     }
 }
 
@@ -321,15 +348,32 @@ impl Node for Program {
     }
 
     fn eval(&self) -> Object {
-        eval_statements(&self.statements)
+        let mut result = Object::NUll;
+
+        for statement in &self.statements {
+            result = statement.eval();
+
+            match result {
+                Object::ReturnValue { value } => return *value,
+                Object::Error { message: _ } => return result,
+                _ => (),
+            }
+        }
+
+        result
     }
 }
 
-fn eval_statements(statements: &Vec<Statement>) -> Object {
+fn eval_block_statement(statements: &Vec<Box<Statement>>) -> Object {
     let mut result = Object::NUll;
 
     for statement in statements {
         result = statement.eval();
+
+        match result {
+            Object::ReturnValue { value: _ } | Object::Error { message: _ } => return result,
+            _ => (),
+        }
     }
 
     result
