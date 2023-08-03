@@ -1,23 +1,16 @@
 use std::{fmt::Display, ops::Deref};
 
-use crate::token::Token;
+use crate::{object::Object, token::Token};
 
 pub trait Node: Display {
     fn token_literal(&self) -> String;
-}
-
-pub trait StatementNode: Node {
-    fn statement_node(&self);
+    fn eval(&self) -> Object;
 }
 
 #[derive(Debug, Clone)]
 pub struct Statement {
     token: Token,
     pub statement_content: StatementContent,
-}
-
-pub trait ExpressionNode: Node {
-    fn expression_node(&self);
 }
 
 #[derive(Debug, Clone)]
@@ -43,13 +36,24 @@ impl Statement {
     }
 }
 
-impl StatementNode for Statement {
-    fn statement_node(&self) {}
-}
-
 impl Node for Statement {
     fn token_literal(&self) -> String {
         self.token.literal.to_owned()
+    }
+
+    fn eval(&self) -> Object {
+        match &self.statement_content {
+            StatementContent::Let { name, value } => todo!(),
+            StatementContent::Return { return_value } => todo!(),
+            StatementContent::Expression { expression } => expression.eval(),
+            StatementContent::BlockStatement { statements } => eval_statements(
+                &statements
+                    .iter()
+                    .map(Box::deref)
+                    .map(&Statement::to_owned)
+                    .collect(),
+            ),
+        }
     }
 }
 
@@ -128,13 +132,117 @@ impl Expression {
     }
 }
 
-impl ExpressionNode for Expression {
-    fn expression_node(&self) {}
-}
-
 impl Node for Expression {
     fn token_literal(&self) -> String {
         self.token.literal.to_owned()
+    }
+
+    fn eval(&self) -> Object {
+        match &self.expression_content {
+            ExpressionContent::Identifier { value } => todo!(),
+            ExpressionContent::IntegerLiteral { value } => Object::new_integer(*value),
+            ExpressionContent::PrefixExpression { operator, right } => {
+                eval_prefix_expression(operator, right)
+            }
+            ExpressionContent::InfixExpression {
+                left,
+                operator,
+                right,
+            } => eval_infix_expression(operator, left, right),
+            ExpressionContent::Boolean { value } => Object::boolean(*value),
+            ExpressionContent::IfExpression {
+                condition,
+                consequence,
+                alternative,
+            } => eval_if_expression(condition, consequence, alternative),
+            ExpressionContent::FucntionLiteral { parameters, body } => todo!(),
+            ExpressionContent::CallExpression {
+                function,
+                arguments,
+            } => todo!(),
+        }
+    }
+}
+
+fn eval_if_expression(
+    condition: &Expression,
+    consequence: &Statement,
+    alternative: &Option<Box<Statement>>,
+) -> Object {
+    let condition = condition.eval();
+
+    if is_truthy(condition) {
+        consequence.eval()
+    } else if let Some(alt) = alternative {
+        alt.eval()
+    } else {
+        Object::null()
+    }
+}
+
+fn is_truthy(condition: Object) -> bool {
+    match condition {
+        Object::Integer { value } => value != 0,
+        Object::Boolean { value } => value == true,
+        Object::NUll => false,
+    }
+}
+
+fn eval_infix_expression(operator: &str, left: &Expression, right: &Expression) -> Object {
+    match (left.eval(), right.eval()) {
+        (Object::Integer { value: l_val }, Object::Integer { value: r_val }) => {
+            eval_integer_infix_expression(operator, l_val, r_val)
+        }
+        (Object::Boolean { value: l_val }, Object::Boolean { value: r_val })
+            if operator == "==" =>
+        {
+            Object::boolean(l_val == r_val)
+        }
+        (Object::Boolean { value: l_val }, Object::Boolean { value: r_val })
+            if operator == "!=" =>
+        {
+            Object::boolean(l_val != r_val)
+        }
+        _ => Object::null(),
+    }
+}
+
+fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Object {
+    match operator {
+        "+" => Object::new_integer(left + right),
+        "-" => Object::new_integer(left - right),
+        "*" => Object::new_integer(left * right),
+        "/" => Object::new_integer(left / right),
+        "<" => Object::boolean(left < right),
+        ">" => Object::boolean(left > right),
+        "==" => Object::boolean(left == right),
+        "!=" => Object::boolean(left != right),
+        _ => Object::null(),
+    }
+}
+
+fn eval_prefix_expression(operator: &str, right: &Expression) -> Object {
+    let right = right.eval();
+
+    match operator {
+        "!" => eval_bang_operator_expression(right),
+        "-" => eval_minus_operator_expression(right),
+        _ => Object::null(),
+    }
+}
+
+fn eval_minus_operator_expression(right: Object) -> Object {
+    match right {
+        Object::Integer { value } => Object::Integer { value: -value },
+        _ => Object::null(),
+    }
+}
+
+fn eval_bang_operator_expression(right: Object) -> Object {
+    match right {
+        Object::Integer { value } => Object::boolean(value == 0),
+        Object::Boolean { value } => Object::boolean(!value),
+        Object::NUll => Object::boolean(false),
     }
 }
 
@@ -211,6 +319,20 @@ impl Node for Program {
             "".to_string()
         }
     }
+
+    fn eval(&self) -> Object {
+        eval_statements(&self.statements)
+    }
+}
+
+fn eval_statements(statements: &Vec<Statement>) -> Object {
+    let mut result = Object::NUll;
+
+    for statement in statements {
+        result = statement.eval();
+    }
+
+    result
 }
 
 impl Display for Program {

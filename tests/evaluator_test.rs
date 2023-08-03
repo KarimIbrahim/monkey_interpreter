@@ -1,0 +1,172 @@
+use std::any::{Any, TypeId};
+
+use monkey_interpreter::evaluator::eval;
+use monkey_interpreter::lexer::Lexer;
+use monkey_interpreter::object::Object;
+use monkey_interpreter::parser::Parser;
+
+#[test]
+fn test_eval_integer_expression() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: i64,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: i64) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new("5", 5),
+        Test::new("10", 10),
+        Test::new("-5", -5),
+        Test::new("-10", -10),
+        Test::new("5 + 5 + 5 + 5 - 10", 10),
+        Test::new("2 * 2 * 2 * 2 * 2", 32),
+        Test::new("-50 + 100 + -50", 0),
+        Test::new("5 * 2 + 10", 20),
+        Test::new("5 + 2 * 10", 25),
+        Test::new("20 + 2 * -10", 0),
+        Test::new("50 / 2 * 2 + 10", 60),
+        Test::new("2 * (5 + 10)", 30),
+        Test::new("3 * 3 * 3 + 10", 37),
+        Test::new("3 * (3 * 3) + 10", 37),
+        Test::new("(5 + 10 * 2 + 15 / 3) * 2 + -10", 50),
+    ];
+
+    for test in tests {
+        let evaluated = test_eval(&test.input);
+        test_integer_object(evaluated, test.expected);
+    }
+}
+
+fn test_eval(input: &str) -> Object {
+    let lexer = Lexer::new(input.to_string());
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+
+    eval(program)
+}
+
+fn test_integer_object(obj: Object, expected: i64) {
+    let Object::Integer { value } = obj else {
+        panic!("object is not Integer. Got [{:?}].", obj);
+    };
+
+    assert_eq!(value, expected, "object has wrong value.");
+}
+
+#[test]
+fn test_eval_boolean_expression() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: bool,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: bool) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new("true", true),
+        Test::new("false", false),
+        Test::new("1 < 2", true),
+        Test::new("1 > 2", false),
+        Test::new("1 < 1", false),
+        Test::new("1 > 1", false),
+        Test::new("1 == 1", true),
+        Test::new("1 != 1", false),
+        Test::new("1 == 2", false),
+        Test::new("1 != 2", true),
+        Test::new("true == true", true),
+        Test::new("false == false", true),
+        Test::new("true == false", false),
+        Test::new("true != false", true),
+        Test::new("false != true", true),
+        Test::new("(1 < 2) == true", true),
+        Test::new("(1 < 2) == false", false),
+        Test::new("(1 > 2) == true", false),
+        Test::new("(1 > 2) == false", true),
+    ];
+
+    for test in tests {
+        let evaluated = test_eval(&test.input);
+        test_boolean_object(evaluated, test.expected);
+    }
+}
+
+fn test_boolean_object(obj: Object, expected: bool) {
+    let Object::Boolean { value } = obj else {
+        panic!("object is not Boolean. Got [{:?}].", obj);
+    };
+
+    assert_eq!(value, expected, "object has wrong value.");
+}
+
+#[test]
+fn test_bang_operator() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: bool,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: bool) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new("!true", false),
+        Test::new("!false", true),
+        Test::new("!5", false),
+        Test::new("!!true", true),
+        Test::new("!!false", false),
+        Test::new("!!5", true),
+        Test::new("! false", true),
+    ];
+
+    for test in tests {
+        let evaluated = test_eval(&test.input);
+        test_boolean_object(evaluated, test.expected);
+    }
+}
+
+#[test]
+fn test_if_else_expression() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: Object,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: Object) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new("if (true) { 10 }", Object::Integer { value: 10 }),
+        Test::new("if (false) { 10 }", Object::null()),
+        Test::new("if (1) { 10 }", Object::Integer { value: 10 }),
+        Test::new("if (1 < 2) { 10 }", Object::Integer { value: 10 }),
+        Test::new("if (1 > 2) { 10 }", Object::null()),
+        Test::new(
+            "if (1 > 2) { 10 } else { 20 }",
+            Object::Integer { value: 20 },
+        ),
+        Test::new(
+            "if (1 < 2) { 10 } else { 20 }",
+            Object::Integer { value: 10 },
+        ),
+    ];
+
+    for test in tests {
+        let evaluated = test_eval(&test.input);
+        assert_eq!(evaluated, test.expected, "object does not match.");
+    }
+}

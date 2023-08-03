@@ -4,3 +4,4 @@ My implementation of the Monkey language interpreter in Rust. Mainly following t
 
 * `cargo run --bin tokenizer`: Starts the tokenizer.
 * `cargo run --bin lexer`: Starts the lexer.
+* `cargo run --bin evaluator`: Starts the evaluator.
