@@ -16,7 +16,7 @@ impl<'a> Test<'a> {
 
 #[test]
 fn test_next_token() {
-    let input = r"let five = 5;
+    let input = r#"let five = 5;
     let ten = 10;
 
     let add = fn(x, y) {
@@ -35,7 +35,9 @@ fn test_next_token() {
 
     10 == 10;
     10 != 9;
-    "
+    "foobar"
+    "foo bar"
+    "#
     .to_string();
 
     let tests = vec![
@@ -112,6 +114,8 @@ fn test_next_token() {
         Test::new(TokenType::NOT_EQ, "!="),
         Test::new(TokenType::INT, "9"),
         Test::new(TokenType::SEMICOLON, ";"),
+        Test::new(TokenType::STRING, "foobar"),
+        Test::new(TokenType::STRING, "foo bar"),
         Test::new(TokenType::EOF, ""),
     ];
 

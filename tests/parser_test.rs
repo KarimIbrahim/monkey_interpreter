@@ -731,3 +731,36 @@ fn test_call_expression_parameter_parsing() {
         }
     }
 }
+
+#[test]
+fn test_string_literal_expression() {
+    let input = r#""hello world""#.to_string();
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.statements does not contain 1 statements."
+    );
+
+    let statement = &program.statements[0];
+    assert_eq!(
+        statement.token_literal(),
+        "hello world",
+        "statement.token_literal is not 'hello world'."
+    );
+
+    let StatementContent::Expression { expression } = &statement.statement_content else {
+        panic!("statement content is not an Expression. Got=[{:?}].", statement.statement_content);
+    };
+
+    let ExpressionContent::StringLiteral { value } = &expression.expression_content else {
+        panic!("expression content is not an StringLiteral. Got=[{:?}].", expression.expression_content);
+    };
+
+    assert_eq!(value, "hello world", "expression value mismatches.");
+}

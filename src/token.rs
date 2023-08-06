@@ -19,6 +19,10 @@ impl Token {
         Self::new(TokenType::lookup_ident(ident), ident)
     }
 
+    pub fn new_string(val: &str) -> Self {
+        Self::new(TokenType::STRING, val)
+    }
+
     pub fn new(token_type: TokenType, literal: &str) -> Self {
         Token {
             token_type,
@@ -50,6 +54,7 @@ pub enum TokenType {
     // Identifiers and literals
     IDENT,
     INT,
+    STRING,
 
     // Operators
     ASSIGN,
@@ -115,6 +120,7 @@ impl TokenType {
             Self::TRUE => "TRUE".to_string(),
             Self::FALSE => "FALSE".to_string(),
             Self::RETURN => "RETURN".to_string(),
+            Self::STRING => "STRING".to_string(),
         }
     }
 

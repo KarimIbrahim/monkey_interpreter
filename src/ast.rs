@@ -112,6 +112,9 @@ pub enum ExpressionContent {
     IntegerLiteral {
         value: i64,
     },
+    StringLiteral {
+        value: String,
+    },
     PrefixExpression {
         operator: String,
         right: Box<Expression>,
@@ -198,6 +201,9 @@ impl Node for Expression {
                     apply_function(function, arguments)
                 }
             }
+            ExpressionContent::StringLiteral { value } => Object::String {
+                value: value.to_owned(),
+            },
         }
     }
 }
@@ -313,6 +319,9 @@ fn eval_infix_expression(
         {
             Object::boolean(l_val != r_val)
         }
+        (Object::String { value: l_val }, Object::String { value: r_val }) => {
+            eval_string_infix_expression(operator, l_val, r_val)
+        }
         (l, r) if l.r#type() != r.r#type() => Object::error(&format!(
             "type mismatch: {} {} {}",
             l.r#type(),
@@ -325,6 +334,14 @@ fn eval_infix_expression(
             operator,
             r.r#type()
         )),
+    }
+}
+
+fn eval_string_infix_expression(operator: &str, l_val: String, r_val: String) -> Object {
+    if operator != "+" {
+        return Object::error(&format!("unknown operator: {} {} {}", "STRING", operator, "STRING"))
+    } else {
+        Object::String { value: l_val + &r_val }
     }
 }
 
@@ -384,6 +401,7 @@ impl Display for Expression {
         match &self.expression_content {
             ExpressionContent::Identifier { value } => write!(f, "{}", value),
             ExpressionContent::IntegerLiteral { value } => write!(f, "{}", value),
+            ExpressionContent::StringLiteral { value } => write!(f, "{}", value),
             ExpressionContent::PrefixExpression { operator, right } => {
                 write!(f, "({}{})", operator, right)
             }

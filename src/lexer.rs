@@ -56,6 +56,7 @@ impl Lexer {
             ',' => Token::new_byte(TokenType::COMMA, self.ch),
             '{' => Token::new_byte(TokenType::LBRACE, self.ch),
             '}' => Token::new_byte(TokenType::RBRACE, self.ch),
+            '"' => Token::new_string(self.read_string()),
             '\0' => Token::new_eof(),
             _ if Self::is_letter(self.ch) => return Token::new_ident(&self.read_identifier()),
             _ if Self::is_digit(self.ch) => return Token::new(TokenType::INT, &self.read_number()),
@@ -108,6 +109,18 @@ impl Lexer {
         } else {
             self.input.chars().nth(self.read_position).unwrap()
         }
+    }
+
+    fn read_string(&mut self) -> &str {
+        let position = self.position + 1;
+        loop {
+            self.read_char();
+            if self.ch as char == '"' || self.ch == 0 {
+                break;
+            }
+        }
+
+        &self.input[position..self.position]
     }
 }
 

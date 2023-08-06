@@ -54,6 +54,7 @@ impl Parser {
 
         parser.register_prefix(TokenType::IDENT, Self::parse_identifier);
         parser.register_prefix(TokenType::INT, Self::parse_integer_literal);
+        parser.register_prefix(TokenType::STRING, Self::parse_string_literal);
         parser.register_prefix(TokenType::BANG, Self::parse_prefix_expression);
         parser.register_prefix(TokenType::MINUS, Self::parse_prefix_expression);
         parser.register_infix(TokenType::PLUS, Self::parse_infix_expression);
@@ -236,6 +237,13 @@ impl Parser {
             ExpressionContent::Identifier {
                 value: self.current_token.literal.to_owned(),
             },
+        ))
+    }
+
+    fn parse_string_literal(&mut self) -> Option<Expression> {
+        Some(Expression::new(
+            self.current_token.to_owned(),
+            ExpressionContent::StringLiteral { value: self.current_token.literal.to_owned() },
         ))
     }
 

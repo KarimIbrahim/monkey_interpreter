@@ -11,6 +11,7 @@ const NULL_OBJ: &str = "NULL";
 const RETURN_VALUE_OBJ: &str = "RETURN_VALUE";
 const ERROR_OBJ: &str = "ERROR";
 const FUNCTION_OBJ: &str = "FUNCTION";
+const STRING_OBJ: &str = "STRING";
 
 const TRUE: Object = Object::Boolean { value: true };
 const FALSE: Object = Object::Boolean { value: false };
@@ -22,6 +23,9 @@ pub enum Object {
     NUll,
     Integer {
         value: i64,
+    },
+    String {
+        value: String,
     },
     Boolean {
         value: bool,
@@ -83,6 +87,7 @@ impl Object {
             Object::ReturnValue { .. } => RETURN_VALUE_OBJ,
             Object::Error { .. } => ERROR_OBJ,
             Object::Function { .. } => FUNCTION_OBJ,
+            Object::String { .. } => STRING_OBJ,
         }
     }
 
@@ -106,6 +111,7 @@ impl Object {
                     .join(", "),
                 body
             ),
+            Object::String { value } => value.to_owned(),
         }
     }
 }
