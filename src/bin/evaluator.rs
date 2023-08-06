@@ -1,7 +1,10 @@
-use monkey_interpreter::evaluator::eval;
+use monkey_interpreter::ast::Node;
+use monkey_interpreter::environment::Environment;
 use monkey_interpreter::lexer::Lexer;
 use monkey_interpreter::parser::Parser;
+use std::cell::RefCell;
 use std::io::{stdin, stdout};
+use std::rc::Rc;
 use unindent::unindent;
 
 use std::io::BufRead;
@@ -39,6 +42,7 @@ where
     T: std::io::Write,
 {
     let mut reader = BufReader::new(&mut r#in);
+    let env = Rc::new(RefCell::new(Environment::new()));
 
     loop {
         write!(out, "{PROMPT}").unwrap();
@@ -54,7 +58,7 @@ where
             continue;
         }
 
-        let evaluated = eval(program);
+        let evaluated = program.eval(Rc::clone(&env));
         writeln!(out, "{}", evaluated.inspect()).unwrap();
     }
 }

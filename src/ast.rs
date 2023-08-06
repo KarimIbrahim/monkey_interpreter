@@ -1,25 +1,25 @@
-use std::{fmt::Display, ops::Deref};
+use std::{cell::RefCell, fmt::Display, ops::Deref, rc::Rc};
 
-use crate::{object::Object, token::Token};
+use crate::{environment::Environment, object::Object, token::Token};
 
 pub trait Node: Display {
     fn token_literal(&self) -> String;
-    fn eval(&self) -> Object;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Statement {
     token: Token,
     pub statement_content: StatementContent,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Expression {
     token: Token,
     pub expression_content: ExpressionContent,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementContent {
     Let { name: Expression, value: Expression },
     Return { return_value: Option<Expression> },
@@ -41,20 +41,34 @@ impl Node for Statement {
         self.token.literal.to_owned()
     }
 
-    fn eval(&self) -> Object {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object {
         match &self.statement_content {
-            StatementContent::Let { name, value } => todo!(),
+            StatementContent::Let { name, value } => {
+                let val = value.eval(Rc::clone(&env));
+                if let Object::Error { message: _ } = val {
+                    val
+                } else {
+                    if let ExpressionContent::Identifier { value } = &name.expression_content {
+                        env.borrow_mut().set(value.to_owned(), val)
+                    } else {
+                        Object::null()
+                    }
+                }
+            }
             StatementContent::Return { return_value } => {
                 let val = return_value
                     .as_ref()
-                    .map_or_else(Object::null, Expression::eval);
+                    .map_or_else(Object::null, |e| e.eval(env));
                 if let Object::Error { message: _ } = val {
-                    return val;
+                    val
+                } else {
+                    Object::return_value(val)
                 }
-                Object::return_value(val)
             }
-            StatementContent::Expression { expression } => expression.eval(),
-            StatementContent::BlockStatement { statements } => eval_block_statement(statements),
+            StatementContent::Expression { expression } => expression.eval(env),
+            StatementContent::BlockStatement { statements } => {
+                eval_block_statement(statements, env)
+            }
         }
     }
 }
@@ -90,7 +104,7 @@ fn stringify_return_statement(
     write!(f, ";")
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpressionContent {
     Identifier {
         value: String,
@@ -139,30 +153,112 @@ impl Node for Expression {
         self.token.literal.to_owned()
     }
 
-    fn eval(&self) -> Object {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object {
         match &self.expression_content {
-            ExpressionContent::Identifier { value } => todo!(),
+            ExpressionContent::Identifier { value } => eval_identifier(value, env),
             ExpressionContent::IntegerLiteral { value } => Object::new_integer(*value),
             ExpressionContent::PrefixExpression { operator, right } => {
-                eval_prefix_expression(operator, right)
+                eval_prefix_expression(operator, right, env)
             }
             ExpressionContent::InfixExpression {
                 left,
                 operator,
                 right,
-            } => eval_infix_expression(operator, left, right),
+            } => eval_infix_expression(operator, left, right, env),
             ExpressionContent::Boolean { value } => Object::boolean(*value),
             ExpressionContent::IfExpression {
                 condition,
                 consequence,
                 alternative,
-            } => eval_if_expression(condition, consequence, alternative),
-            ExpressionContent::FucntionLiteral { parameters, body } => todo!(),
+            } => eval_if_expression(condition, consequence, alternative, env),
+            ExpressionContent::FucntionLiteral { parameters, body } => Object::function(
+                parameters
+                    .iter()
+                    .map(Box::deref)
+                    .map(Expression::to_owned)
+                    .collect(),
+                env,
+                body.deref().to_owned(),
+            ),
             ExpressionContent::CallExpression {
                 function,
                 arguments,
-            } => todo!(),
+            } => {
+                let function = function.eval(Rc::clone(&env));
+                if let Object::Error { .. } = function {
+                    function
+                } else {
+                    let arguments = eval_expressions(arguments, env);
+                    if arguments.len() == 1 {
+                        if let Object::Error { .. } = arguments[0] {
+                            return arguments[0].to_owned();
+                        }
+                    }
+
+                    apply_function(function, arguments)
+                }
+            }
         }
+    }
+}
+
+fn apply_function(function: Object, arguments: Vec<Object>) -> Object {
+    let Object::Function { parameters, body, env } = function else {
+        return Object::error(&format!("not a function: {}", function.r#type()))
+    };
+
+    let extended_env = extend_function_env(parameters, env, arguments);
+    let evaluated = body.eval(extended_env);
+    unwrap_return_value(evaluated)
+}
+
+fn unwrap_return_value(evaluated: Object) -> Object {
+    if let Object::ReturnValue { value } = evaluated {
+        return *value;
+    }
+
+    evaluated
+}
+
+fn extend_function_env(
+    parameters: Vec<Expression>,
+    env: Rc<RefCell<Environment>>,
+    arguments: Vec<Object>,
+) -> Rc<RefCell<Environment>> {
+    let mut env = Environment::new_enclosed(env);
+
+    for (i, param) in parameters.iter().enumerate() {
+        let ExpressionContent::Identifier { value } = &param.expression_content else {
+            panic!("expected Identifier, found [{}].", param);
+        };
+        env.set(value.to_owned(), arguments[i].to_owned());
+    }
+
+    Rc::new(RefCell::new(env))
+}
+
+fn eval_expressions(
+    arguments: &Vec<Box<Expression>>,
+    env: Rc<RefCell<Environment>>,
+) -> Vec<Object> {
+    let mut result = vec![];
+
+    for b in arguments {
+        let evaluated = b.eval(Rc::clone(&env));
+        if let Object::Error { .. } = evaluated {
+            return vec![evaluated];
+        }
+        result.push(evaluated);
+    }
+
+    return result;
+}
+
+fn eval_identifier(value: &String, env: Rc<RefCell<Environment>>) -> Object {
+    if let Some(val) = env.borrow_mut().get(value) {
+        val
+    } else {
+        Object::error(&format!("identifier not found: {}", value))
     }
 }
 
@@ -170,17 +266,18 @@ fn eval_if_expression(
     condition: &Expression,
     consequence: &Statement,
     alternative: &Option<Box<Statement>>,
+    env: Rc<RefCell<Environment>>,
 ) -> Object {
-    let condition = condition.eval();
+    let condition = condition.eval(Rc::clone(&env));
 
     if let Object::Error { message: _ } = condition {
         return condition;
     }
 
     if is_truthy(condition) {
-        consequence.eval()
+        consequence.eval(env)
     } else if let Some(alt) = alternative {
-        alt.eval()
+        alt.eval(env)
     } else {
         Object::null()
     }
@@ -195,8 +292,13 @@ fn is_truthy(condition: Object) -> bool {
     }
 }
 
-fn eval_infix_expression(operator: &str, left: &Expression, right: &Expression) -> Object {
-    match (left.eval(), right.eval()) {
+fn eval_infix_expression(
+    operator: &str,
+    left: &Expression,
+    right: &Expression,
+    env: Rc<RefCell<Environment>>,
+) -> Object {
+    match (left.eval(Rc::clone(&env)), right.eval(env)) {
         (e @ Object::Error { message: _ }, _) | (_, e @ Object::Error { message: _ }) => e,
         (Object::Integer { value: l_val }, Object::Integer { value: r_val }) => {
             eval_integer_infix_expression(operator, l_val, r_val)
@@ -243,8 +345,12 @@ fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Objec
     }
 }
 
-fn eval_prefix_expression(operator: &str, right: &Expression) -> Object {
-    let right = right.eval();
+fn eval_prefix_expression(
+    operator: &str,
+    right: &Expression,
+    env: Rc<RefCell<Environment>>,
+) -> Object {
+    let right = right.eval(env);
 
     if let Object::Error { message: _ } = right {
         return right;
@@ -347,11 +453,11 @@ impl Node for Program {
         }
     }
 
-    fn eval(&self) -> Object {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object {
         let mut result = Object::NUll;
 
         for statement in &self.statements {
-            result = statement.eval();
+            result = statement.eval(Rc::clone(&env));
 
             match result {
                 Object::ReturnValue { value } => return *value,
@@ -364,11 +470,11 @@ impl Node for Program {
     }
 }
 
-fn eval_block_statement(statements: &Vec<Box<Statement>>) -> Object {
+fn eval_block_statement(statements: &Vec<Box<Statement>>, env: Rc<RefCell<Environment>>) -> Object {
     let mut result = Object::NUll;
 
     for statement in statements {
-        result = statement.eval();
+        result = statement.eval(Rc::clone(&env));
 
         match result {
             Object::ReturnValue { value: _ } | Object::Error { message: _ } => return result,

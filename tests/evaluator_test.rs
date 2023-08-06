@@ -1,6 +1,8 @@
-use std::any::{Any, TypeId};
+use std::cell::RefCell;
+use std::rc::Rc;
 
-use monkey_interpreter::evaluator::eval;
+use monkey_interpreter::ast::{ExpressionContent, Node};
+use monkey_interpreter::environment::Environment;
 use monkey_interpreter::lexer::Lexer;
 use monkey_interpreter::object::Object;
 use monkey_interpreter::parser::Parser;
@@ -46,8 +48,9 @@ fn test_eval(input: &str) -> Object {
     let lexer = Lexer::new(input.to_string());
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
+    let env = Rc::new(RefCell::new(Environment::new()));
 
-    eval(program)
+    program.eval(Rc::clone(&env))
 }
 
 fn test_integer_object(obj: Object, expected: i64) {
@@ -189,7 +192,8 @@ fn test_return_statements() {
         Test::new("return 10; 9;", 10),
         Test::new("return 2 * 5; 9;", 10),
         Test::new("9; return 2 * 5; 9;", 10),
-        Test::new(r"
+        Test::new(
+            r"
         if (10 > 1) {
             if(10 > 1) {
                 return 10;
@@ -197,7 +201,9 @@ fn test_return_statements() {
 
             return 1;
         }
-        ", 10),
+        ",
+            10,
+        ),
     ];
 
     for test in tests {
@@ -215,7 +221,10 @@ fn test_error_handling() {
 
     impl<'a> Test<'a> {
         pub fn new(input: &'a str, expected_message: &'a str) -> Self {
-            Test { input, expected_message }
+            Test {
+                input,
+                expected_message,
+            }
         }
     }
 
@@ -225,8 +234,12 @@ fn test_error_handling() {
         Test::new("-true;", "unknown operator: -BOOLEAN"),
         Test::new("true + false;", "unknown operator: BOOLEAN + BOOLEAN"),
         Test::new("5; true + false; 5", "unknown operator: BOOLEAN + BOOLEAN"),
-        Test::new("if (10 > 1) { true + false; }", "unknown operator: BOOLEAN + BOOLEAN"),
-        Test::new(r"
+        Test::new(
+            "if (10 > 1) { true + false; }",
+            "unknown operator: BOOLEAN + BOOLEAN",
+        ),
+        Test::new(
+            r"
         if (10 > 1) {
             if (10 > 1) {
                 return true + false;
@@ -234,7 +247,10 @@ fn test_error_handling() {
 
             return 1;
         }
-        ", "unknown operator: BOOLEAN + BOOLEAN"),
+        ",
+            "unknown operator: BOOLEAN + BOOLEAN",
+        ),
+        Test::new("foobar", "identifier not found: foobar"),
     ];
 
     for test in tests {
@@ -246,4 +262,90 @@ fn test_error_handling() {
 
         assert_eq!(test.expected_message, message, "wrong error message.");
     }
+}
+
+#[test]
+fn test_let_statements() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: i64,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: i64) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new("let a = 5; a;", 5),
+        Test::new("let a = 5 * 5; a;", 25),
+        Test::new("let a = 5; let b = a; b;", 5),
+        Test::new("let a = 5; let b = a; let c = a + b + 5; c;", 15),
+    ];
+
+    for test in tests {
+        test_integer_object(test_eval(test.input), test.expected);
+    }
+}
+
+#[test]
+fn test_function_object() {
+    let input = "fn(x) { x + 2; };";
+
+    let evaluated = test_eval(input);
+
+    let Object::Function { parameters, body, env: _ } = evaluated else {
+        panic!("object is not a Function. Got [{:?}].", evaluated);
+    };
+
+    assert_eq!(1, parameters.len(), "function has wrong parameters.");
+
+    let ExpressionContent::Identifier { value } = &parameters[0].expression_content else {
+        panic!("parameter is not an Identifier. Got [{}].", parameters[0]);
+    };
+    assert_eq!("x", value, "parameter does not match.");
+
+    assert_eq!("(x + 2)", body.to_string(), "body does not match.");
+}
+
+#[test]
+fn test_function_application() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: i64,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: i64) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new("let identity = fn(x) { x;}; identity(5);", 5),
+        Test::new("let identity = fn(x) { return x; }; identity(5);", 5),
+        Test::new("let double = fn(x) { x * 2; }; double(5);", 10),
+        Test::new("let add = fn(x, y) { x + y; }; add(5, 5);", 10),
+        Test::new("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", 20),
+        Test::new("fn(x) { x; }(5)", 5),
+    ];
+
+    for test in tests {
+        test_integer_object(test_eval(test.input), test.expected);
+    }
+}
+
+#[test]
+fn test_closures() {
+    let input = r"
+    let newAdder = fn(x) {
+        fn(y) { x + y };
+    };
+
+    let addTwo = newAdder(2);
+    addTwo(2);
+    ";
+
+    test_integer_object(test_eval(input), 4);
 }
