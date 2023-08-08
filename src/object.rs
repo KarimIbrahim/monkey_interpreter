@@ -1,4 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
+use once_cell::sync::Lazy;
 
 use crate::{
     ast::{Expression, Statement},
@@ -12,12 +17,44 @@ const RETURN_VALUE_OBJ: &str = "RETURN_VALUE";
 const ERROR_OBJ: &str = "ERROR";
 const FUNCTION_OBJ: &str = "FUNCTION";
 const STRING_OBJ: &str = "STRING";
+const BUILT_IN_OBJ: &str = "BUILTIN";
+
+type BUILTINFN = fn(Vec<Object>) -> Object;
+pub static BUILTINS: Lazy<HashMap<&str, Object>> = Lazy::new(|| {
+    let mut map = HashMap::new();
+
+    map.insert(
+        "len",
+        Object::Builtin {
+            builtin_function: |args: Vec<Object>| -> Object {
+                if args.len() != 1 {
+                    return Object::error(&format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+
+                match &args[0] {
+                    Object::String { value } => Object::Integer {
+                        value: value.len() as i64,
+                    },
+                    _ => Object::error(&format!(
+                        "argument to `len` not supported, got {}",
+                        args[0].r#type()
+                    )),
+                }
+            },
+        },
+    );
+
+    map
+});
 
 const TRUE: Object = Object::Boolean { value: true };
 const FALSE: Object = Object::Boolean { value: false };
 const NULL: Object = Object::NUll;
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum Object {
     #[default]
     NUll,
@@ -39,9 +76,54 @@ pub enum Object {
     Function {
         parameters: Vec<Expression>,
         body: Statement,
-        env: Rc<RefCell<Environment>>,
+        env: Arc<Mutex<Environment>>,
+    },
+    Builtin {
+        builtin_function: BUILTINFN,
     },
 }
+
+impl PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Object::NUll, Object::NUll) => true,
+            (Object::Integer { value: l_val }, Object::Integer { value: r_val }) => l_val == r_val,
+            (Object::String { value: l_val }, Object::String { value: r_val }) => l_val == r_val,
+            (Object::Boolean { value: l_val }, Object::Boolean { value: r_val }) => l_val == r_val,
+            (Object::ReturnValue { value: l_val }, Object::ReturnValue { value: r_val }) => {
+                l_val == r_val
+            }
+            (Object::Error { message: l_message }, Object::Error { message: r_message }) => {
+                l_message == r_message
+            }
+            (
+                Object::Function {
+                    parameters: l_param,
+                    body: l_body,
+                    env: l_env,
+                },
+                Object::Function {
+                    parameters: r_param,
+                    body: r_body,
+                    env: r_env,
+                },
+            ) => {
+                l_param == r_param && l_body == r_body && Environment::is_env_equal(&l_env, &r_env)
+            }
+            (
+                Object::Builtin {
+                    builtin_function: l_fun,
+                },
+                Object::Builtin {
+                    builtin_function: r_fun,
+                },
+            ) => l_fun == r_fun,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Object {}
 
 impl Object {
     pub fn new_integer(value: i64) -> Self {
@@ -71,7 +153,11 @@ impl Object {
         }
     }
 
-    pub fn function(parameters: Vec<Expression>, env: Rc<RefCell<Environment>>, body: Statement) -> Self {
+    pub fn function(
+        parameters: Vec<Expression>,
+        env: Arc<Mutex<Environment>>,
+        body: Statement,
+    ) -> Self {
         Object::Function {
             parameters,
             body,
@@ -88,6 +174,7 @@ impl Object {
             Object::Error { .. } => ERROR_OBJ,
             Object::Function { .. } => FUNCTION_OBJ,
             Object::String { .. } => STRING_OBJ,
+            Object::Builtin { .. } => BUILT_IN_OBJ,
         }
     }
 
@@ -112,6 +199,7 @@ impl Object {
                 body
             ),
             Object::String { value } => value.to_owned(),
+            Object::Builtin { .. } => "builtin function".to_string(),
         }
     }
 }

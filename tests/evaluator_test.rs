@@ -1,11 +1,9 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use monkey_interpreter::ast::{ExpressionContent, Node};
 use monkey_interpreter::environment::Environment;
 use monkey_interpreter::lexer::Lexer;
 use monkey_interpreter::object::Object;
 use monkey_interpreter::parser::Parser;
+use std::sync::{Arc, Mutex};
 
 #[test]
 fn test_eval_integer_expression() {
@@ -48,9 +46,9 @@ fn test_eval(input: &str) -> Object {
     let lexer = Lexer::new(input.to_string());
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
-    let env = Rc::new(RefCell::new(Environment::new()));
+    let env = Arc::new(Mutex::new(Environment::new()));
 
-    program.eval(Rc::clone(&env))
+    program.eval(Arc::clone(&env))
 }
 
 fn test_integer_object(obj: Object, expected: i64) {
@@ -251,10 +249,7 @@ fn test_error_handling() {
             "unknown operator: BOOLEAN + BOOLEAN",
         ),
         Test::new("foobar", "identifier not found: foobar"),
-        Test::new(
-            r#""Hello" - "World""#,
-            "unknown operator: STRING - STRING",
-        ),
+        Test::new(r#""Hello" - "World""#, "unknown operator: STRING - STRING"),
     ];
 
     for test in tests {
@@ -378,4 +373,48 @@ fn test_string_concatenation() {
     };
 
     assert_eq!("Hello World!", value, "String has wrong value.");
+}
+
+#[test]
+fn test_builtin_functions() {
+    struct Test<'a> {
+        input: &'a str,
+        expected: Object,
+    }
+
+    impl<'a> Test<'a> {
+        pub fn new(input: &'a str, expected: Object) -> Self {
+            Test { input, expected }
+        }
+    }
+
+    let tests = vec![
+        Test::new(r#"len(" ")"#, Object::Integer { value: 1 }),
+        Test::new(r#"len("four")"#, Object::Integer { value: 4 }),
+        Test::new(r#"len("hello world")"#, Object::Integer { value: 11 }),
+        Test::new(
+            r#"len(1)"#,
+            Object::error("argument to `len` not supported, got INTEGER"),
+        ),
+        Test::new(
+            r#"len("one", "two")"#,
+            Object::error("wrong number of arguments. got=2, want=1"),
+        ),
+    ];
+
+    for test in tests {
+        let evaluated = test_eval(test.input);
+
+        match test.expected {
+            Object::Integer { value } => test_integer_object(evaluated, value),
+            Object::Error { message } => {
+                let Object::Error { message: evaluated_message } = evaluated else {
+                    panic!("object is not Error. Got [{:?}].", evaluated);
+                };
+
+                assert_eq!(message, evaluated_message, "wrong error message.");
+            }
+            _ => panic!("unexpected value: [{:?}].", test.expected),
+        }
+    }
 }

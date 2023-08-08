@@ -1,10 +1,18 @@
-use std::{cell::RefCell, fmt::Display, ops::Deref, rc::Rc};
+use std::{
+    fmt::Display,
+    ops::Deref,
+    sync::{Arc, Mutex},
+};
 
-use crate::{environment::Environment, object::Object, token::Token};
+use crate::{
+    environment::Environment,
+    object::{Object, BUILTINS},
+    token::Token,
+};
 
 pub trait Node: Display {
     fn token_literal(&self) -> String;
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object;
+    fn eval(&self, env: Arc<Mutex<Environment>>) -> Object;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,15 +49,15 @@ impl Node for Statement {
         self.token.literal.to_owned()
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object {
+    fn eval(&self, env: Arc<Mutex<Environment>>) -> Object {
         match &self.statement_content {
             StatementContent::Let { name, value } => {
-                let val = value.eval(Rc::clone(&env));
+                let val = value.eval(Arc::clone(&env));
                 if let Object::Error { message: _ } = val {
                     val
                 } else {
                     if let ExpressionContent::Identifier { value } = &name.expression_content {
-                        env.borrow_mut().set(value.to_owned(), val)
+                        env.lock().unwrap().set(value.to_owned(), val)
                     } else {
                         Object::null()
                     }
@@ -156,7 +164,7 @@ impl Node for Expression {
         self.token.literal.to_owned()
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object {
+    fn eval(&self, env: Arc<Mutex<Environment>>) -> Object {
         match &self.expression_content {
             ExpressionContent::Identifier { value } => eval_identifier(value, env),
             ExpressionContent::IntegerLiteral { value } => Object::new_integer(*value),
@@ -187,7 +195,7 @@ impl Node for Expression {
                 function,
                 arguments,
             } => {
-                let function = function.eval(Rc::clone(&env));
+                let function = function.eval(Arc::clone(&env));
                 if let Object::Error { .. } = function {
                     function
                 } else {
@@ -209,13 +217,19 @@ impl Node for Expression {
 }
 
 fn apply_function(function: Object, arguments: Vec<Object>) -> Object {
-    let Object::Function { parameters, body, env } = function else {
-        return Object::error(&format!("not a function: {}", function.r#type()))
-    };
-
-    let extended_env = extend_function_env(parameters, env, arguments);
-    let evaluated = body.eval(extended_env);
-    unwrap_return_value(evaluated)
+    match function {
+        Object::Function {
+            parameters,
+            body,
+            env,
+        } => {
+            let extended_env = extend_function_env(parameters, env, arguments);
+            let evaluated = body.eval(extended_env);
+            unwrap_return_value(evaluated)
+        }
+        Object::Builtin { builtin_function } => builtin_function(arguments),
+        _ => Object::error(&format!("not a function: {}", function.r#type())),
+    }
 }
 
 fn unwrap_return_value(evaluated: Object) -> Object {
@@ -228,9 +242,9 @@ fn unwrap_return_value(evaluated: Object) -> Object {
 
 fn extend_function_env(
     parameters: Vec<Expression>,
-    env: Rc<RefCell<Environment>>,
+    env: Arc<Mutex<Environment>>,
     arguments: Vec<Object>,
-) -> Rc<RefCell<Environment>> {
+) -> Arc<Mutex<Environment>> {
     let mut env = Environment::new_enclosed(env);
 
     for (i, param) in parameters.iter().enumerate() {
@@ -240,17 +254,14 @@ fn extend_function_env(
         env.set(value.to_owned(), arguments[i].to_owned());
     }
 
-    Rc::new(RefCell::new(env))
+    Arc::new(Mutex::new(env))
 }
 
-fn eval_expressions(
-    arguments: &Vec<Box<Expression>>,
-    env: Rc<RefCell<Environment>>,
-) -> Vec<Object> {
+fn eval_expressions(arguments: &Vec<Box<Expression>>, env: Arc<Mutex<Environment>>) -> Vec<Object> {
     let mut result = vec![];
 
     for b in arguments {
-        let evaluated = b.eval(Rc::clone(&env));
+        let evaluated = b.eval(Arc::clone(&env));
         if let Object::Error { .. } = evaluated {
             return vec![evaluated];
         }
@@ -260,9 +271,11 @@ fn eval_expressions(
     return result;
 }
 
-fn eval_identifier(value: &String, env: Rc<RefCell<Environment>>) -> Object {
-    if let Some(val) = env.borrow_mut().get(value) {
+fn eval_identifier(value: &String, env: Arc<Mutex<Environment>>) -> Object {
+    if let Some(val) = env.lock().unwrap().get(value) {
         val
+    } else if let Some(val) = BUILTINS.get(value as &str) {
+        val.to_owned()
     } else {
         Object::error(&format!("identifier not found: {}", value))
     }
@@ -272,9 +285,9 @@ fn eval_if_expression(
     condition: &Expression,
     consequence: &Statement,
     alternative: &Option<Box<Statement>>,
-    env: Rc<RefCell<Environment>>,
+    env: Arc<Mutex<Environment>>,
 ) -> Object {
-    let condition = condition.eval(Rc::clone(&env));
+    let condition = condition.eval(Arc::clone(&env));
 
     if let Object::Error { message: _ } = condition {
         return condition;
@@ -302,9 +315,9 @@ fn eval_infix_expression(
     operator: &str,
     left: &Expression,
     right: &Expression,
-    env: Rc<RefCell<Environment>>,
+    env: Arc<Mutex<Environment>>,
 ) -> Object {
-    match (left.eval(Rc::clone(&env)), right.eval(env)) {
+    match (left.eval(Arc::clone(&env)), right.eval(Arc::clone(&env))) {
         (e @ Object::Error { message: _ }, _) | (_, e @ Object::Error { message: _ }) => e,
         (Object::Integer { value: l_val }, Object::Integer { value: r_val }) => {
             eval_integer_infix_expression(operator, l_val, r_val)
@@ -339,9 +352,14 @@ fn eval_infix_expression(
 
 fn eval_string_infix_expression(operator: &str, l_val: String, r_val: String) -> Object {
     if operator != "+" {
-        return Object::error(&format!("unknown operator: {} {} {}", "STRING", operator, "STRING"))
+        return Object::error(&format!(
+            "unknown operator: {} {} {}",
+            "STRING", operator, "STRING"
+        ));
     } else {
-        Object::String { value: l_val + &r_val }
+        Object::String {
+            value: l_val + &r_val,
+        }
     }
 }
 
@@ -365,7 +383,7 @@ fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Objec
 fn eval_prefix_expression(
     operator: &str,
     right: &Expression,
-    env: Rc<RefCell<Environment>>,
+    env: Arc<Mutex<Environment>>,
 ) -> Object {
     let right = right.eval(env);
 
@@ -471,11 +489,11 @@ impl Node for Program {
         }
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Object {
+    fn eval(&self, env: Arc<Mutex<Environment>>) -> Object {
         let mut result = Object::NUll;
 
         for statement in &self.statements {
-            result = statement.eval(Rc::clone(&env));
+            result = statement.eval(Arc::clone(&env));
 
             match result {
                 Object::ReturnValue { value } => return *value,
@@ -488,11 +506,11 @@ impl Node for Program {
     }
 }
 
-fn eval_block_statement(statements: &Vec<Box<Statement>>, env: Rc<RefCell<Environment>>) -> Object {
+fn eval_block_statement(statements: &Vec<Box<Statement>>, env: Arc<Mutex<Environment>>) -> Object {
     let mut result = Object::NUll;
 
     for statement in statements {
-        result = statement.eval(Rc::clone(&env));
+        result = statement.eval(Arc::clone(&env));
 
         match result {
             Object::ReturnValue { value: _ } | Object::Error { message: _ } => return result,
