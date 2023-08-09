@@ -451,25 +451,22 @@ fn test_array_index_expressions() {
     }
 
     let tests = vec![
-        Test::new("[1, 2, 3][0]", Object::Integer { value: 1 }),
-        Test::new("[1, 2, 3][1]", Object::Integer { value: 2 }),
-        Test::new("[1, 2, 3][2]", Object::Integer { value: 3 }),
-        Test::new("let i = 0; [1][i];", Object::Integer { value: 1 }),
-        Test::new("[1, 2, 3][1 + 1];", Object::Integer { value: 3 }),
+        Test::new(r#"[1, 2, 3][0]"#, Object::Integer { value: 1 }),
+        Test::new(r#"[1, 2, 3][1]"#, Object::Integer { value: 4 }),
+        Test::new(r#"[1, 2, 3][2]"#, Object::Integer { value: 11 }),
         Test::new(
-            "let myArray = [1, 2, 3]; myArray[2];",
-            Object::Integer { value: 3 },
+            r#"let i = 0; [1][i];"#,
+            Object::error("argument to `len` not supported, got INTEGER"),
         ),
         Test::new(
-            "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
-            Object::Integer { value: 6 },
+            r#"[1, 2, 3][1 + 1];"#,
+            Object::error("wrong number of arguments. got=2, want=1"),
         ),
-        Test::new(
-            "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]",
-            Object::Integer { value: 2 },
-        ),
-        Test::new("[1, 2, 3][3]", Object::null()),
-        Test::new("[1, 2, 3][-1]", Object::null()),
+        Test::new("let myArray = [1, 2, 3]; myArray[2];", ),
+        Test::new("let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];", ),
+        Test::new("let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]", ),
+        Test::new("[1, 2, 3][3]", ),
+        Test::new("[1, 2, 3][-1]", ),
     ];
 
     for test in tests {
@@ -477,7 +474,14 @@ fn test_array_index_expressions() {
 
         match test.expected {
             Object::Integer { value } => test_integer_object(evaluated, value),
-            e => assert_eq!(evaluated, e, "evaluated expressions mismatches."),
+            Object::Error { message } => {
+                let Object::Error { message: evaluated_message } = evaluated else {
+                    panic!("object is not Error. Got [{:?}].", evaluated);
+                };
+
+                assert_eq!(message, evaluated_message, "wrong error message.");
+            }
+            _ => panic!("unexpected value: [{:?}].", test.expected),
         }
     }
 }

@@ -148,6 +148,13 @@ pub enum ExpressionContent {
         function: Box<Expression>,
         arguments: Vec<Box<Expression>>,
     },
+    ArrayLiteral {
+        elements: Vec<Box<Expression>>,
+    },
+    IndexExpression {
+        left: Box<Expression>,
+        index: Box<Expression>,
+    },
 }
 
 impl Expression {
@@ -212,8 +219,50 @@ impl Node for Expression {
             ExpressionContent::StringLiteral { value } => Object::String {
                 value: value.to_owned(),
             },
+            ExpressionContent::ArrayLiteral { elements } => {
+                let elements = eval_expressions(elements, env);
+                if elements.len() == 1 {
+                    if let Object::Error { .. } = elements[0] {
+                        return elements[0].to_owned();
+                    }
+                }
+
+                Object::Array {
+                    elements: elements.into_iter().map(Box::new).collect(),
+                }
+            }
+            ExpressionContent::IndexExpression { left, index } => {
+                let left = left.eval(Arc::clone(&env));
+                if let Object::Error { .. } = left {
+                    return left;
+                }
+
+                let index = index.eval(Arc::clone(&env));
+                if let Object::Error { .. } = index {
+                    return index;
+                }
+
+                eval_index_expression(left, index)
+            }
         }
     }
+}
+
+fn eval_index_expression(left: Object, index: Object) -> Object {
+    match (left, index) {
+        (Object::Array { elements }, Object::Integer { value }) =>
+        eval_array_index_expression(elements, value),
+        (l, _i) => Object::error(&format!("index operator not supported: {}", l.r#type())),
+    }
+}
+
+fn eval_array_index_expression(elements: Vec<Box<Object>>, index: i64) -> Object {
+    let index = index as usize;
+    if !(0 .. elements.len()).contains(&index) {
+        return Object::null()
+    }
+
+    *elements[index].to_owned()
 }
 
 fn apply_function(function: Object, arguments: Vec<Object>) -> Object {
@@ -464,6 +513,18 @@ impl Display for Expression {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            ExpressionContent::ArrayLiteral { elements } => write!(
+                f,
+                "[{}]",
+                elements
+                    .iter()
+                    .map(|b| b.deref().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            ExpressionContent::IndexExpression { left, index } => {
+                write!(f, "({}[{}])", left, index)
+            }
         }
     }
 }

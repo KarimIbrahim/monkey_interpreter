@@ -385,6 +385,8 @@ fn test_operator_precedence_parsing() {
         Test::new("a + add(b * c) + d".to_string(), "((a + add((b * c))) + d)".to_string()),
         Test::new("add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))".to_string(), "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))".to_string()),
         Test::new("add(a + b + c * d / f + g)".to_string(), "add((((a + b) + ((c * d) / f)) + g))".to_string()),
+        Test::new("a * [1, 2, 3, 4][b * c] * d".to_string(), "((a * ([1, 2, 3, 4][(b * c)])) * d)".to_string()),
+        Test::new("add(a * b[2], b[1], 2 * [1, 2][1])".to_string(), "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))".to_string()),
     ];
 
     for test in tests {
@@ -763,4 +765,63 @@ fn test_string_literal_expression() {
     };
 
     assert_eq!(value, "hello world", "expression value mismatches.");
+}
+
+#[test]
+fn test_parsing_array_literals() {
+    let input = "[1, 2 * 2, 3 + 3]".to_string();
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.statements does not contain 1 statements."
+    );
+
+    let statement = &program.statements[0];
+    let StatementContent::Expression { expression } = &statement.statement_content else {
+        panic!("statement content is not an Expression. Got=[{:?}].", statement.statement_content);
+    };
+
+    let ExpressionContent::ArrayLiteral { elements } = &expression.expression_content else {
+        panic!("expression content is not an ArrayLiteral. Got=[{:?}].", expression.expression_content);
+    };
+
+    assert_eq!(elements.len(), 3, "len(array.Elements) is wrong.");
+
+    test_integer_literal(&elements[0], 1);
+    test_infix_expression(&elements[1], &2, "*".to_string(), &2);
+    test_infix_expression(&elements[2], &3, "+".to_string(), &3);
+}
+
+#[test]
+fn test_parsing_index_expressions() {
+    let input = "myArray[1 + 1]".to_string();
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.statements does not contain 1 statements."
+    );
+
+    let statement = &program.statements[0];
+    let StatementContent::Expression { expression } = &statement.statement_content else {
+        panic!("statement content is not an Expression. Got=[{:?}].", statement.statement_content);
+    };
+
+    let ExpressionContent::IndexExpression { left, index } = &expression.expression_content else {
+        panic!("expression content is not an IndexExpression. Got=[{:?}].", expression.expression_content);
+    };
+
+    test_identifier(left, &"myArray".to_string());
+    test_infix_expression(index, &1, "+".to_string(), &1);
 }

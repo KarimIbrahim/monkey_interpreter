@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, ops::Deref,
 };
 
 use once_cell::sync::Lazy;
@@ -18,6 +18,7 @@ const ERROR_OBJ: &str = "ERROR";
 const FUNCTION_OBJ: &str = "FUNCTION";
 const STRING_OBJ: &str = "STRING";
 const BUILT_IN_OBJ: &str = "BUILTIN";
+const ARRAY_OBJ: &str = "ARRAY";
 
 type BUILTINFN = fn(Vec<Object>) -> Object;
 pub static BUILTINS: Lazy<HashMap<&str, Object>> = Lazy::new(|| {
@@ -80,6 +81,9 @@ pub enum Object {
     },
     Builtin {
         builtin_function: BUILTINFN,
+    },
+    Array {
+        elements: Vec<Box<Object>>,
     },
 }
 
@@ -175,6 +179,7 @@ impl Object {
             Object::Function { .. } => FUNCTION_OBJ,
             Object::String { .. } => STRING_OBJ,
             Object::Builtin { .. } => BUILT_IN_OBJ,
+            Object::Array { .. } => ARRAY_OBJ,
         }
     }
 
@@ -200,6 +205,15 @@ impl Object {
             ),
             Object::String { value } => value.to_owned(),
             Object::Builtin { .. } => "builtin function".to_string(),
+            Object::Array { elements } => format!(
+                "[{}]",
+                elements
+                    .iter()
+                    .map(Box::deref)
+                    .map(Object::inspect)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }

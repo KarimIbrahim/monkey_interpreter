@@ -18,6 +18,7 @@ const SUM: usize = 4;
 const PRODUCT: usize = 5;
 const PREFIX: usize = 6;
 const CALL: usize = 7;
+const INDEX: usize = 8;
 
 static PRECEDENCES: Lazy<HashMap<TokenType, usize>> = Lazy::new(|| {
     let mut map = HashMap::new();
@@ -31,6 +32,7 @@ static PRECEDENCES: Lazy<HashMap<TokenType, usize>> = Lazy::new(|| {
     map.insert(TokenType::SLASH, PRODUCT);
     map.insert(TokenType::ASTERISK, PRODUCT);
     map.insert(TokenType::LPAREN, CALL);
+    map.insert(TokenType::LBRACKET, INDEX);
 
     map
 });
@@ -57,6 +59,13 @@ impl Parser {
         parser.register_prefix(TokenType::STRING, Self::parse_string_literal);
         parser.register_prefix(TokenType::BANG, Self::parse_prefix_expression);
         parser.register_prefix(TokenType::MINUS, Self::parse_prefix_expression);
+        parser.register_prefix(TokenType::TRUE, Self::parse_boolean);
+        parser.register_prefix(TokenType::FALSE, Self::parse_boolean);
+        parser.register_prefix(TokenType::LPAREN, Self::parse_grouped_expression);
+        parser.register_prefix(TokenType::IF, Self::parse_if_expression);
+        parser.register_prefix(TokenType::FUNCTION, Self::parse_function_literal);
+        parser.register_prefix(TokenType::LBRACKET, Self::parse_array_literal);
+
         parser.register_infix(TokenType::PLUS, Self::parse_infix_expression);
         parser.register_infix(TokenType::MINUS, Self::parse_infix_expression);
         parser.register_infix(TokenType::SLASH, Self::parse_infix_expression);
@@ -66,15 +75,7 @@ impl Parser {
         parser.register_infix(TokenType::LT, Self::parse_infix_expression);
         parser.register_infix(TokenType::GT, Self::parse_infix_expression);
         parser.register_infix(TokenType::LPAREN, Self::parse_call_expression);
-
-        parser.register_prefix(TokenType::TRUE, Self::parse_boolean);
-        parser.register_prefix(TokenType::FALSE, Self::parse_boolean);
-
-        parser.register_prefix(TokenType::LPAREN, Self::parse_grouped_expression);
-
-        parser.register_prefix(TokenType::IF, Self::parse_if_expression);
-
-        parser.register_prefix(TokenType::FUNCTION, Self::parse_function_literal);
+        parser.register_infix(TokenType::LBRACKET, Self::parse_index_expression);
 
         parser.next_token();
         parser.next_token();
@@ -82,10 +83,29 @@ impl Parser {
         parser
     }
 
+    fn parse_index_expression(&mut self, left: &Expression) -> Option<Expression> {
+        let token = self.current_token.to_owned();
+
+        self.next_token();
+        let index = Box::new(self.parse_expression(LOWEST)?);
+
+        if !self.expect_peek(&TokenType::RBRACKET) {
+            return None;
+        }
+
+        Some(Expression::new(
+            token,
+            ExpressionContent::IndexExpression {
+                left: Box::new(left.to_owned()),
+                index,
+            },
+        ))
+    }
+
     fn parse_call_expression(&mut self, function: &Expression) -> Option<Expression> {
         let token = self.current_token.to_owned();
 
-        let arguments = self.parse_call_arguments()?;
+        let arguments = self.parse_expression_list(TokenType::RPAREN)?;
 
         Some(Expression::new(
             token,
@@ -96,32 +116,15 @@ impl Parser {
         ))
     }
 
-    fn parse_call_arguments(&mut self) -> Option<Vec<Box<Expression>>> {
-        let mut arguments = vec![];
+    pub fn parse_array_literal(&mut self) -> Option<Expression> {
+        let token = self.current_token.to_owned();
 
-        if self.peek_token_is(&TokenType::RPAREN) {
-            self.next_token();
-            return Some(arguments);
-        }
+        let elements = self.parse_expression_list(TokenType::RBRACKET)?;
 
-        self.next_token();
-
-        loop {
-            arguments.push(self.parse_expression(LOWEST).map(Box::new)?);
-
-            if !self.peek_token_is(&TokenType::COMMA) {
-                break;
-            }
-
-            self.next_token();
-            self.next_token();
-        }
-
-        if !self.expect_peek(&TokenType::RPAREN) {
-            return None;
-        }
-
-        return Some(arguments);
+        Some(Expression::new(
+            token,
+            ExpressionContent::ArrayLiteral { elements },
+        ))
     }
 
     pub fn parse_function_literal(&mut self) -> Option<Expression> {
@@ -243,7 +246,9 @@ impl Parser {
     fn parse_string_literal(&mut self) -> Option<Expression> {
         Some(Expression::new(
             self.current_token.to_owned(),
-            ExpressionContent::StringLiteral { value: self.current_token.literal.to_owned() },
+            ExpressionContent::StringLiteral {
+                value: self.current_token.literal.to_owned(),
+            },
         ))
     }
 
@@ -498,5 +503,33 @@ impl Parser {
         }
 
         Some(identifiers)
+    }
+
+    fn parse_expression_list(&mut self, end: TokenType) -> Option<Vec<Box<Expression>>> {
+        let mut list = vec![];
+
+        if self.peek_token_is(&end) {
+            self.next_token();
+            return Some(list);
+        }
+
+        self.next_token();
+
+        loop {
+            list.push(Box::new(self.parse_expression(LOWEST)?));
+
+            if !self.peek_token_is(&TokenType::COMMA) {
+                break;
+            }
+
+            self.next_token();
+            self.next_token();
+        }
+
+        if !self.expect_peek(&end) {
+            return None;
+        }
+
+        Some(list)
     }
 }

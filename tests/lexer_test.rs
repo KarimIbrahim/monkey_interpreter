@@ -37,6 +37,7 @@ fn test_next_token() {
     10 != 9;
     "foobar"
     "foo bar"
+    [1, 2];
     "#
     .to_string();
 
@@ -116,6 +117,12 @@ fn test_next_token() {
         Test::new(TokenType::SEMICOLON, ";"),
         Test::new(TokenType::STRING, "foobar"),
         Test::new(TokenType::STRING, "foo bar"),
+        Test::new(TokenType::LBRACKET, "["),
+        Test::new(TokenType::INT, "1"),
+        Test::new(TokenType::COMMA, ","),
+        Test::new(TokenType::INT, "2"),
+        Test::new(TokenType::RBRACKET, "]"),
+        Test::new(TokenType::SEMICOLON, ";"),
         Test::new(TokenType::EOF, ""),
     ];
 

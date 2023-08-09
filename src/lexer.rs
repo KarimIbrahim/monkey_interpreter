@@ -56,6 +56,8 @@ impl Lexer {
             ',' => Token::new_byte(TokenType::COMMA, self.ch),
             '{' => Token::new_byte(TokenType::LBRACE, self.ch),
             '}' => Token::new_byte(TokenType::RBRACE, self.ch),
+            '[' => Token::new_byte(TokenType::LBRACKET, self.ch),
+            ']' => Token::new_byte(TokenType::RBRACKET, self.ch),
             '"' => Token::new_string(self.read_string()),
             '\0' => Token::new_eof(),
             _ if Self::is_letter(self.ch) => return Token::new_ident(&self.read_identifier()),

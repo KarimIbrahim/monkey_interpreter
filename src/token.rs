@@ -88,6 +88,8 @@ pub enum TokenType {
     RPAREN,
     LBRACE,
     RBRACE,
+    LBRACKET,
+    RBRACKET,
 }
 
 impl TokenType {
@@ -121,6 +123,8 @@ impl TokenType {
             Self::FALSE => "FALSE".to_string(),
             Self::RETURN => "RETURN".to_string(),
             Self::STRING => "STRING".to_string(),
+            Self::LBRACKET => "[".to_string(),
+            Self::RBRACKET => "]".to_string(),
         }
     }
 
