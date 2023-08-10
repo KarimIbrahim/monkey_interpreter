@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex}, ops::Deref,
+    ops::Deref,
+    sync::{Arc, Mutex},
 };
 
 use once_cell::sync::Lazy;
@@ -39,8 +40,123 @@ pub static BUILTINS: Lazy<HashMap<&str, Object>> = Lazy::new(|| {
                     Object::String { value } => Object::Integer {
                         value: value.len() as i64,
                     },
+                    Object::Array { elements } => Object::Integer {
+                        value: elements.len() as i64,
+                    },
                     _ => Object::error(&format!(
                         "argument to `len` not supported, got {}",
+                        args[0].r#type()
+                    )),
+                }
+            },
+        },
+    );
+
+    map.insert(
+        "first",
+        Object::Builtin {
+            builtin_function: |args: Vec<Object>| -> Object {
+                if args.len() != 1 {
+                    return Object::error(&format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+
+                match &args[0] {
+                    Object::Array { elements } => {
+                        if elements.len() == 0 {
+                            Object::null()
+                        } else {
+                            *elements[0].to_owned()
+                        }
+                    }
+                    _ => Object::error(&format!(
+                        "argument to `first` must be ARRAY, got {}",
+                        args[0].r#type()
+                    )),
+                }
+            },
+        },
+    );
+
+    map.insert(
+        "last",
+        Object::Builtin {
+            builtin_function: |args: Vec<Object>| -> Object {
+                if args.len() != 1 {
+                    return Object::error(&format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+
+                match &args[0] {
+                    Object::Array { elements } => {
+                        if elements.len() == 0 {
+                            Object::null()
+                        } else {
+                            *elements.last().unwrap().to_owned()
+                        }
+                    }
+                    _ => Object::error(&format!(
+                        "argument to `first` must be ARRAY, got {}",
+                        args[0].r#type()
+                    )),
+                }
+            },
+        },
+    );
+
+    map.insert(
+        "rest",
+        Object::Builtin {
+            builtin_function: |args: Vec<Object>| -> Object {
+                if args.len() != 1 {
+                    return Object::error(&format!(
+                        "wrong number of arguments. got={}, want=1",
+                        args.len()
+                    ));
+                }
+
+                match &args[0] {
+                    Object::Array { elements } => {
+                        if elements.len() == 0 {
+                            Object::null()
+                        } else {
+                            Object::Array {
+                                elements: elements.to_owned()[1..].to_vec(),
+                            }
+                        }
+                    }
+                    _ => Object::error(&format!(
+                        "argument to `first` must be ARRAY, got {}",
+                        args[0].r#type()
+                    )),
+                }
+            },
+        },
+    );
+
+    map.insert(
+        "push",
+        Object::Builtin {
+            builtin_function: |args: Vec<Object>| -> Object {
+                if args.len() != 2 {
+                    return Object::error(&format!(
+                        "wrong number of arguments. got={}, want=2",
+                        args.len()
+                    ));
+                }
+
+                match &args[0] {
+                    Object::Array { elements } => {
+                        let mut elements = elements.to_owned();
+                        elements.push(Box::new(args[1].to_owned()));
+                        Object::Array { elements }
+                    }
+                    _ => Object::error(&format!(
+                        "argument to `first` must be ARRAY, got {}",
                         args[0].r#type()
                     )),
                 }
