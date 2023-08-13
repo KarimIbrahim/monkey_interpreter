@@ -164,6 +164,17 @@ pub static BUILTINS: Lazy<HashMap<&str, Object>> = Lazy::new(|| {
         },
     );
 
+    map.insert(
+        "puts",
+        Object::Builtin {
+            builtin_function: |args: Vec<Object>| -> Object {
+                args.iter().for_each(|arg| println!("{}", arg.inspect()));
+
+                Object::null()
+            },
+        },
+    );
+
     map
 });
 
